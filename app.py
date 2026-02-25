@@ -1694,13 +1694,19 @@ HTML_TEMPLATE = """
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="bg-slate-900/50 p-6 rounded-2xl border border-blue-500/20">
                         <label class="block text-sm text-blue-400 mb-3 font-bold">🛠️ تشفير (إخفاء):</label>
-                        <input type="file" id="audioFileEncrypt" accept=".wav" class="w-full text-xs text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-600/10 file:text-blue-400 hover:file:bg-blue-600/20 mb-4">
+                        <input type="file" id="audioFileEncrypt" accept=".wav, .mp3" class="hidden" onchange="document.getElementById('audioEncryptName').innerText = this.files[0].name">
+                        <label for="audioFileEncrypt" class="w-full text-xs text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-600/10 file:text-blue-400 hover:file:bg-blue-600/20 mb-4 cursor-pointer flex items-center justify-center p-2 rounded-xl border border-blue-600/30">
+                            <span id="audioEncryptName" class="truncate">اختر ملف صوتي (.wav, .mp3)</span>
+                        </label>
                         <textarea id="audioSecretText" placeholder="أدخل النص السري هنا..." class="w-full h-24 p-3 rounded-xl bg-slate-950 border border-slate-800 text-sm focus:border-blue-500 outline-none mb-4"></textarea>
                         <button onclick="processAudio('encode')" class="w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-xl font-bold transition-all shadow-lg shadow-blue-900/20">حفظ النص في الملف 💾</button>
                     </div>
                     <div class="bg-slate-900/50 p-6 rounded-2xl border border-purple-500/20">
                         <label class="block text-sm text-purple-400 mb-3 font-bold">🔍 فك التشفير (استخراج):</label>
-                        <input type="file" id="audioFileDecrypt" accept=".wav" class="w-full text-xs text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-purple-600/10 file:text-purple-400 hover:file:bg-purple-600/20 mb-4">
+                        <input type="file" id="audioFileDecrypt" accept=".wav, .mp3" class="hidden" onchange="document.getElementById('audioDecryptName').innerText = this.files[0].name">
+                        <label for="audioFileDecrypt" class="w-full text-xs text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-purple-600/10 file:text-purple-400 hover:file:bg-purple-600/20 mb-4 cursor-pointer flex items-center justify-center p-2 rounded-xl border border-purple-600/30">
+                            <span id="audioDecryptName" class="truncate">اختر ملف صوتي (.wav, .mp3)</span>
+                        </label>
                         <div id="audioDecodedResult" class="w-full h-24 p-3 rounded-xl bg-slate-950 border border-slate-800 text-sm overflow-y-auto mb-4 text-gray-400 font-mono italic">سيظهر النص المستخرج هنا...</div>
                         <button onclick="processAudio('decode')" class="w-full py-3 bg-purple-600 hover:bg-purple-500 rounded-xl font-bold transition-all shadow-lg shadow-purple-900/20">استخراج النص السري 🔑</button>
                     </div>
@@ -1851,6 +1857,7 @@ HTML_TEMPLATE = """
                 const data = await res.json();
 
                 if (data.success) {
+                    console.log('Login success data:', data);
                     btn.textContent = '✅ تم الدخول بنجاح!';
                     btn.style.background = 'linear-gradient(135deg,#22c55e,#16a34a)';
                     const usernameEl = document.getElementById('header-username');
@@ -1923,9 +1930,23 @@ HTML_TEMPLATE = """
             setTimeout(() => {
                 overlay.style.display = 'none';
                 overlay.style.opacity = '1';
+
+                // إخفاء intro-overlay فوراً بدلاً من تشغيل شاشة المقدمة
+                const introOverlay = document.getElementById('intro-overlay');
+                if (introOverlay) {
+                    introOverlay.style.display = 'none';
+                }
+
+                console.log('Transitioning to main-app...');
                 const mainApp = document.getElementById('main-app');
                 if (mainApp) {
                     mainApp.classList.remove('opacity-0', 'pointer-events-none');
+                    mainApp.style.opacity = '1';
+                    mainApp.style.pointerEvents = 'auto';
+                    console.log('main-app classes removed:', mainApp.classList);
+                    if (typeof introMatrixAnimId !== 'undefined') {
+                        cancelAnimationFrame(introMatrixAnimId);
+                    }
                     initMatrix('matrix-bg', false);
                     setInterval(updateHUD, 2000);
                     document.querySelectorAll('button').forEach(btn => {
@@ -1941,11 +1962,36 @@ HTML_TEMPLATE = """
                 const res = await fetch('/api/auth/status');
                 const data = await res.json();
                 if (data.loggedIn) {
+                    console.log('User is logged in:', data.username);
+                    // إخفاء auth overlay
                     document.getElementById('auth-overlay').style.display = 'none';
                     document.getElementById('header-username').innerText = '👤 ' + data.username;
+
+                    // إخفاء intro-overlay فوراً حتى لا يضطر المستخدم للضغط على زر البصمة
+                    const introOverlay = document.getElementById('intro-overlay');
+                    if (introOverlay) {
+                        introOverlay.style.display = 'none';
+                    }
+
+                    // إظهار التطبيق الرئيسي مباشرة
                     const mainApp = document.getElementById('main-app');
-                    if (mainApp) mainApp.classList.remove('opacity-0', 'pointer-events-none');
-                    runIntroSequence();
+                    if (mainApp) {
+                        mainApp.classList.remove('opacity-0', 'pointer-events-none');
+                        mainApp.style.opacity = '1';
+                        mainApp.style.pointerEvents = 'auto';
+                        console.log('mainApp shown via checkAuth');
+                    }
+
+                    // تهيئة التطبيق
+                    if (typeof introMatrixAnimId !== 'undefined') {
+                        cancelAnimationFrame(introMatrixAnimId);
+                    }
+                    initMatrix('matrix-bg', false);
+                    setInterval(updateHUD, 2000);
+                    document.querySelectorAll('button').forEach(btn => {
+                        btn.addEventListener('mouseenter', soundManager.hover);
+                        btn.addEventListener('click', soundManager.click);
+                    });
                 } else {
                     document.getElementById('auth-overlay').style.display = 'block';
                     initMatrix('auth-matrix', true);
@@ -4479,7 +4525,7 @@ def audio_stego_decode():
     try:
         decoded_text = wave_lsb_decode(file.read(), file.filename)
         add_audit_log("استخراج من الصوت 🎵", f"محاولة فك تشفير {file.filename}")
-        return jsonify({"result": decoded_text})
+        return jsonify({"success": True, "hidden_data": decoded_text})
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
@@ -4979,7 +5025,6 @@ def auth_status():
         return jsonify({"loggedIn": True, "username": session.get('username', '')})
     return jsonify({"loggedIn": False})
 
-
 # تأكد أن هذه الأسطر في نهاية الملف تماماً
 init_db() 
 
@@ -4988,6 +5033,3 @@ if __name__ == '__main__':
     # أما على Render، فإن Gunicorn سيتولى المهمة
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
-
-
-
