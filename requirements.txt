@@ -8,5 +8,4 @@ qrcode
 psutil
 exifread
 faker
-pyzbar
 gunicorn
