@@ -4980,11 +4980,10 @@ def auth_status():
     return jsonify({"loggedIn": False})
 
 
+init_db() 
+
 if __name__ == '__main__':
-    # على السيرفر، نحتاج فقط لتشغيل التطبيق مباشرة
-    # Render يحدد المنفذ تلقائياً، لذا نستخدم 5000 كافتراضي
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
-    # يجب إيقاف debug=True عند التحميل بـ PyInstaller لتجنب الـ reloader المزدوج
-    app.run(debug=False, port=5000)
+
 
