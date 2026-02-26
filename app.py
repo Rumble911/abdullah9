@@ -5195,11 +5195,10 @@ def auth_status():
     return jsonify({"loggedIn": False})
 
 
-# تأكد أن هذه الأسطر في نهاية الملف تماماً
+# اجعل نهاية الملف هكذا تماماً
 init_db() 
 
 if __name__ == '__main__':
-    # هذا السطر يعمل فقط عند التشغيل اليدوي (Local)
-    # أما على Render، فإن Gunicorn سيتولى المهمة
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
+
