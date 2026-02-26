@@ -34,6 +34,8 @@ from cryptography.hazmat.primitives.asymmetric import rsa  # type: ignore
 from cryptography.hazmat.primitives import serialization, hashes  # type: ignore
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes  # type: ignore
 import urllib.parse
+import smtplib
+from email.mime.text import MIMEText
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # حد أقصى للملفات 16 ميجابايت
@@ -43,6 +45,30 @@ app.config['SESSION_COOKIE_HTTPONLY'] = True
 # --- قاعدة بيانات المستخدمين (SQLite) ---
 USERS_DB = 'titan_users.db'
 
+# --- إعدادات الإيميل الخاصة بك يا عبد الله ---
+SENDER_EMAIL = "olloberganalixonov@gmail.com"
+SENDER_PASSWORD = "hzps cwez exbq gwdi"  # الرمز الذي استخرجته من الصورة
+
+def send_otp_email(target_email, otp_code):
+    """وظيفة إرسال كود التحقق عبر سيرفر Google SMTP"""
+    msg = MIMEText(f"""
+    مرحباً بك في TITAN SEC.
+    كود التحقق الخاص بك هو: {otp_code}
+    يرجى إدخاله في الموقع لإتمام عملية التسجيل.
+    """, 'plain', 'utf-8')
+    msg['Subject'] = "كود التحقق الخاص بك - TITAN"
+    msg['From'] = SENDER_EMAIL
+    msg['To'] = target_email
+
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(SENDER_EMAIL, SENDER_PASSWORD)
+            server.send_message(msg)
+        return True
+    except Exception as e:
+        print(f"Error sending email: {e}")
+        return False
+
 def init_db():
     conn = sqlite3.connect(USERS_DB)
     c = conn.cursor()
@@ -51,15 +77,34 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
+            email TEXT DEFAULT NULL,
+            is_verified INTEGER DEFAULT 0,
+            otp_code TEXT DEFAULT NULL,
             vault_password_hash TEXT DEFAULT NULL,
             created_at TEXT NOT NULL
         )
     ''')
-    # Support upgrading existing DBs that don't have vault_password_hash yet
+    # Support upgrading existing DBs
     try:
         c.execute("ALTER TABLE users ADD COLUMN vault_password_hash TEXT DEFAULT NULL")
     except sqlite3.OperationalError:
         pass  # Column already exists
+    
+    try:
+        c.execute("ALTER TABLE users ADD COLUMN email TEXT DEFAULT NULL")
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        c.execute("ALTER TABLE users ADD COLUMN is_verified INTEGER DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        c.execute("ALTER TABLE users ADD COLUMN otp_code TEXT DEFAULT NULL")
+    except sqlite3.OperationalError:
+        pass
+
     conn.commit()
     conn.close()
 
@@ -714,6 +759,10 @@ HTML_TEMPLATE = """
                         <input id="auth-reg-user" type="text" placeholder="اختر اسم مستخدم..." autocomplete="username" style="width:100%;box-sizing:border-box;padding:0.85rem 1rem;background:rgba(15,15,40,0.9);border:1px solid rgba(139,92,246,0.3);border-radius:12px;color:white;font-size:0.95rem;outline:none;transition:border-color 0.2s;font-family:Tajawal,sans-serif;" onfocus="this.style.borderColor='#a855f7'" onblur="this.style.borderColor='rgba(139,92,246,0.3)'">
                     </div>
                     <div style="margin-bottom:1rem;">
+                        <label style="display:block;color:#9ca3af;font-size:0.78rem;margin-bottom:6px;letter-spacing:0.05em;">البريد الإلكتروني</label>
+                        <input id="auth-reg-email" type="email" placeholder="بريدك الإلكتروني (لتفعيل الحساب)..." autocomplete="email" style="width:100%;box-sizing:border-box;padding:0.85rem 1rem;background:rgba(15,15,40,0.9);border:1px solid rgba(139,92,246,0.3);border-radius:12px;color:white;font-size:0.95rem;outline:none;transition:border-color 0.2s;font-family:Tajawal,sans-serif;" onfocus="this.style.borderColor='#a855f7'" onblur="this.style.borderColor='rgba(139,92,246,0.3)'">
+                    </div>
+                    <div style="margin-bottom:1rem;">
                         <label style="display:block;color:#9ca3af;font-size:0.78rem;margin-bottom:6px;letter-spacing:0.05em;">كلمة السر (6 أحرف على الأقل)</label>
                         <input id="auth-reg-pass" type="password" placeholder="اختر كلمة سر قوية..." autocomplete="new-password" style="width:100%;box-sizing:border-box;padding:0.85rem 1rem;background:rgba(15,15,40,0.9);border:1px solid rgba(139,92,246,0.3);border-radius:12px;color:white;font-size:0.95rem;outline:none;transition:border-color 0.2s;font-family:Tajawal,sans-serif;" onfocus="this.style.borderColor='#a855f7'" onblur="this.style.borderColor='rgba(139,92,246,0.3)'">
                     </div>
@@ -726,6 +775,24 @@ HTML_TEMPLATE = """
                     <button onclick="doRegister()" style="width:100%;padding:0.9rem;background:linear-gradient(135deg,#7c3aed,#5b21b6);border:none;border-radius:12px;color:white;font-size:1rem;font-weight:700;cursor:pointer;transition:all 0.2s;box-shadow:0 0 20px rgba(124,58,237,0.4);font-family:Tajawal,sans-serif;" onmouseover="this.style.boxShadow='0 0 35px rgba(124,58,237,0.7)'" onmouseout="this.style.boxShadow='0 0 20px rgba(124,58,237,0.4)'" id="auth-reg-btn">
                         إنشاء حساب جديد ✨
                     </button>
+                </div>
+
+                <!-- Verification Form -->
+                <div id="auth-verify-form" style="display:none;">
+                    <div style="text-align:center;margin-bottom:1.5rem;">
+                        <div style="font-size:2.5rem;margin-bottom:0.5rem;">📩</div>
+                        <h3 style="color:#a855f7;font-weight:700;">تحقق من بريدك الإلكتروني</h3>
+                        <p style="color:#9ca3af;font-size:0.8rem;margin-top:0.5rem;">أدخل الرمز المكون من 6 أرقام المرسل إليك</p>
+                    </div>
+                    <div style="margin-bottom:1.5rem;">
+                        <input id="auth-verify-otp" type="text" placeholder="000000" maxlength="6" style="width:100%;box-sizing:border-box;padding:1rem;background:rgba(15,15,40,0.9);border:1px solid rgba(139,92,246,0.3);border-radius:12px;color:white;font-size:1.8rem;outline:none;transition:border-color 0.2s;font-family:monospace,sans-serif;text-align:center;letter-spacing:0.5em;" onfocus="this.style.borderColor='#a855f7'" onblur="this.style.borderColor='rgba(139,92,246,0.3)'">
+                    </div>
+                    <input type="hidden" id="auth-verify-username">
+                    <div id="auth-verify-error" style="display:none;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);border-radius:10px;padding:0.7rem 1rem;color:#f87171;font-size:0.82rem;margin-bottom:1rem;text-align:center;"></div>
+                    <button onclick="doVerify()" style="width:100%;padding:0.9rem;background:linear-gradient(135deg,#a855f7,#7c3aed);border:none;border-radius:12px;color:white;font-size:1rem;font-weight:700;cursor:pointer;transition:all 0.2s;box-shadow:0 0 20px rgba(168,85,247,0.4);font-family:Tajawal,sans-serif;" onmouseover="this.style.boxShadow='0 0 35px rgba(168,85,247,0.7)'" onmouseout="this.style.boxShadow='0 0 20px rgba(168,85,247,0.4)'" id="auth-verify-btn">
+                        تفعيل الحساب 🛡️
+                    </button>
+                    <button onclick="switchAuthTab('login')" style="width:100%;margin-top:1rem;background:transparent;border:none;color:#9ca3af;font-size:0.85rem;cursor:pointer;text-decoration:underline;">إلغاء والعودة للدخول</button>
                 </div>
 
                 <!-- Footer -->
@@ -1818,25 +1885,42 @@ HTML_TEMPLATE = """
             const regTab = document.getElementById('auth-tab-register');
             const loginForm = document.getElementById('auth-login-form');
             const regForm = document.getElementById('auth-register-form');
+            const verifyForm = document.getElementById('auth-verify-form');
             
             if (tab === 'login') {
-                loginTab.style.background = 'linear-gradient(135deg, #a855f7, #7c3aed)';
-                loginTab.style.color = 'white';
-                loginTab.style.boxShadow = '0 0 15px rgba(168, 85, 247, 0.4)';
-                regTab.style.background = 'transparent';
-                regTab.style.color = '#6b7280';
-                regTab.style.boxShadow = 'none';
+                if(loginTab) {
+                    loginTab.style.background = 'linear-gradient(135deg, #a855f7, #7c3aed)';
+                    loginTab.style.color = 'white';
+                    loginTab.style.boxShadow = '0 0 15px rgba(168, 85, 247, 0.4)';
+                }
+                if(regTab) {
+                    regTab.style.background = 'transparent';
+                    regTab.style.color = '#6b7280';
+                    regTab.style.boxShadow = 'none';
+                }
                 loginForm.style.display = 'block';
                 regForm.style.display = 'none';
-            } else {
-                regTab.style.background = 'linear-gradient(135deg, #7c3aed, #5b21b6)';
-                regTab.style.color = 'white';
-                regTab.style.boxShadow = '0 0 15px rgba(124, 58, 237, 0.4)';
-                loginTab.style.background = 'transparent';
-                loginTab.style.color = '#6b7280';
-                loginTab.style.boxShadow = 'none';
+                verifyForm.style.display = 'none';
+            } else if (tab === 'register') {
+                if(regTab) {
+                    regTab.style.background = 'linear-gradient(135deg, #7c3aed, #5b21b6)';
+                    regTab.style.color = 'white';
+                    regTab.style.boxShadow = '0 0 15px rgba(124, 58, 237, 0.4)';
+                }
+                if(loginTab) {
+                    loginTab.style.background = 'transparent';
+                    loginTab.style.color = '#6b7280';
+                    loginTab.style.boxShadow = 'none';
+                }
                 loginForm.style.display = 'none';
                 regForm.style.display = 'block';
+                verifyForm.style.display = 'none';
+            } else if (tab === 'verify') {
+                loginForm.style.display = 'none';
+                regForm.style.display = 'none';
+                verifyForm.style.display = 'block';
+                if(loginTab) { loginTab.style.background = 'transparent'; loginTab.style.color = '#6b7280'; }
+                if(regTab) { regTab.style.background = 'transparent'; regTab.style.color = '#6b7280'; }
             }
         }
 
@@ -1857,12 +1941,19 @@ HTML_TEMPLATE = """
                 const data = await res.json();
 
                 if (data.success) {
-                    console.log('Login success data:', data);
                     btn.textContent = '✅ تم الدخول بنجاح!';
                     btn.style.background = 'linear-gradient(135deg,#22c55e,#16a34a)';
                     const usernameEl = document.getElementById('header-username');
                     if (usernameEl) usernameEl.textContent = '👤 ' + data.username;
                     setTimeout(showAuthSuccess, 500);
+                } else if (data.error === 'EMAIL_NOT_VERIFIED') {
+                    btn.textContent = 'دخول إلى TITAN 🔐';
+                    btn.disabled = false;
+                    document.getElementById('auth-verify-username').value = data.username;
+                    switchAuthTab('verify');
+                    const vErr = document.getElementById('auth-verify-error');
+                    vErr.textContent = 'حسابك غير مفعل، يرجى إدخال كود التحقق المرسل لإيميلك.';
+                    vErr.style.display = 'block';
                 } else {
                     errEl.textContent = data.error || 'بيانات الدخول غير صحيحة';
                     errEl.style.display = 'block';
@@ -1870,7 +1961,7 @@ HTML_TEMPLATE = """
                     btn.disabled = false;
                 }
             } catch(e) {
-                errEl.textContent = 'فشل الاتصال بالخادم. تأكد أن التطبيق يعمل.';
+                errEl.textContent = 'فشل الاتصال بالخادم.';
                 errEl.style.display = 'block';
                 btn.textContent = 'دخول إلى TITAN 🔐';
                 btn.disabled = false;
@@ -1879,6 +1970,7 @@ HTML_TEMPLATE = """
 
         async function doRegister() {
             const username  = document.getElementById('auth-reg-user').value.trim();
+            const email     = document.getElementById('auth-reg-email').value.trim();
             const password  = document.getElementById('auth-reg-pass').value;
             const password2 = document.getElementById('auth-reg-pass2').value;
             const errEl     = document.getElementById('auth-reg-error');
@@ -1888,7 +1980,7 @@ HTML_TEMPLATE = """
             errEl.style.display = 'none';
             sucEl.style.display = 'none';
 
-            if (!username || !password || !password2) { errEl.textContent = 'يرجى ملء جميع الحقول'; errEl.style.display = 'block'; return; }
+            if (!username || !email || !password || !password2) { errEl.textContent = 'يرجى ملء جميع الحقول'; errEl.style.display = 'block'; return; }
             if (password !== password2) { errEl.textContent = 'كلمتا السر غير متطابقتين!'; errEl.style.display = 'block'; return; }
             if (password.length < 6) { errEl.textContent = 'كلمة السر يجب أن تكون 6 أحرف على الأقل'; errEl.style.display = 'block'; return; }
 
@@ -1896,18 +1988,17 @@ HTML_TEMPLATE = """
             btn.disabled = true;
 
             try {
-                const res  = await fetch('/api/auth/register', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({username, password}) });
+                const res  = await fetch('/api/auth/register', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({username, password, email}) });
                 const data = await res.json();
 
                 if (data.success) {
-                    sucEl.textContent = '✅ تم إنشاء الحساب بنجاح! يمكنك الآن تسجيل الدخول.';
+                    sucEl.textContent = '✅ ' + data.message;
                     sucEl.style.display = 'block';
                     btn.textContent = 'إنشاء حساب جديد ✨';
                     btn.disabled = false;
+                    document.getElementById('auth-verify-username').value = username;
                     setTimeout(() => {
-                        switchAuthTab('login');
-                        document.getElementById('auth-login-user').value = username;
-                        document.getElementById('auth-login-pass').focus();
+                        switchAuthTab('verify');
                     }, 1500);
                 } else {
                     errEl.textContent = data.error || 'فشل إنشاء الحساب';
@@ -1919,6 +2010,43 @@ HTML_TEMPLATE = """
                 errEl.textContent = 'فشل الاتصال بالخادم.';
                 errEl.style.display = 'block';
                 btn.textContent = 'إنشاء حساب جديد ✨';
+                btn.disabled = false;
+            }
+        }
+
+        async function doVerify() {
+            const username = document.getElementById('auth-verify-username').value;
+            const otp      = document.getElementById('auth-verify-otp').value.trim();
+            const errEl    = document.getElementById('auth-verify-error');
+            const btn      = document.getElementById('auth-verify-btn');
+
+            errEl.style.display = 'none';
+            if (!otp) { errEl.textContent = 'يرجى إدخال كود التحقق'; errEl.style.display = 'block'; return; }
+
+            btn.textContent = '⏳ جاري التفعيل...';
+            btn.disabled = true;
+
+            try {
+                const res  = await fetch('/api/auth/verify', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({username, otp}) });
+                const data = await res.json();
+
+                if (data.success) {
+                    alert('✅ تم تفعيل حسابك بنجاح! يمكنك الآن تسجيل الدخول.');
+                    switchAuthTab('login');
+                    document.getElementById('auth-login-user').value = username;
+                    document.getElementById('auth-login-pass').focus();
+                    btn.textContent = 'تفعيل الحساب 🛡️';
+                    btn.disabled = false;
+                } else {
+                    errEl.textContent = data.error || 'فشل التفعيل';
+                    errEl.style.display = 'block';
+                    btn.textContent = 'تفعيل الحساب 🛡️';
+                    btn.disabled = false;
+                }
+            } catch(e) {
+                errEl.textContent = 'فشل الاتصال بالخادم.';
+                errEl.style.display = 'block';
+                btn.textContent = 'تفعيل الحساب 🛡️';
                 btn.disabled = false;
             }
         }
@@ -4956,27 +5084,65 @@ def auth_register():
     data = request.json or {}
     username = data.get('username', '').strip()
     password = data.get('password', '').strip()
+    email = data.get('email', '').strip()
 
-    if not username or not password:
-        return jsonify({"error": "اسم المستخدم وكلمة السر مطلوبان"}), 400
+    if not username or not password or not email:
+        return jsonify({"error": "اسم المستخدم وكلمة السر والإيميل مطلوبان"}), 400
     if len(username) < 3:
         return jsonify({"error": "اسم المستخدم يجب أن يكون 3 أحرف على الأقل"}), 400
     if len(password) < 6:
         return jsonify({"error": "كلمة السر يجب أن تكون 6 أحرف على الأقل"}), 400
+    if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
+        return jsonify({"error": "البريد الإلكتروني غير صالح"}), 400
 
     pw_hash = hash_password(password)
+    otp_code = "".join(random.choices(string.digits, k=6))
     created_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
     try:
         conn = sqlite3.connect(USERS_DB)
         c = conn.cursor()
-        c.execute("INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)",
-                  (username, pw_hash, created_at))
+        c.execute("INSERT INTO users (username, password_hash, email, otp_code, is_verified, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                  (username, pw_hash, email, otp_code, 0, created_at))
         conn.commit()
         conn.close()
-        add_audit_log("تسجيل مستخدم جديد 👤", f"تم إنشاء حساب: {username}")
-        return jsonify({"success": True, "message": "تم إنشاء الحساب بنجاح!"})
+        
+        # إرسال كود التحقق
+        if send_otp_email(email, otp_code):
+            add_audit_log("تسجيل مستخدم جديد 👤", f"تم إنشاء حساب: {username} وينتظر التفعيل")
+            return jsonify({"success": True, "message": "تم إنشاء الحساب! يرجى التحقق من بريدك الإلكتروني لتفعيله.", "username": username})
+        else:
+            return jsonify({"success": True, "message": "تم إنشاء الحساب، ولكن فشل إرسال الإيميل. يرجى التواصل مع الدعم.", "username": username})
+            
     except sqlite3.IntegrityError:
         return jsonify({"error": "اسم المستخدم مأخوذ، اختر اسماً آخر"}), 409
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/auth/verify', methods=['POST'])
+def auth_verify():
+    data = request.json or {}
+    username = data.get('username', '').strip()
+    otp = data.get('otp', '').strip()
+
+    if not username or not otp:
+        return jsonify({"error": "اسم المستخدم وكود التحقق مطلوبان"}), 400
+
+    try:
+        conn = sqlite3.connect(USERS_DB)
+        c = conn.cursor()
+        c.execute("SELECT otp_code FROM users WHERE username = ?", (username,))
+        row = c.fetchone()
+        
+        if row and row[0] == otp:
+            c.execute("UPDATE users SET is_verified = 1, otp_code = NULL WHERE username = ?", (username,))
+            conn.commit()
+            conn.close()
+            add_audit_log("تفعيل الحساب ✅", f"تم تفعيل حساب المستخدم: {username}")
+            return jsonify({"success": True, "message": "تم تفعيل الحساب بنجاح!"})
+        else:
+            conn.close()
+            return jsonify({"error": "كود التحقق غير صحيح"}), 401
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -4992,17 +5158,20 @@ def auth_login():
     try:
         conn = sqlite3.connect(USERS_DB)
         c = conn.cursor()
-        c.execute("SELECT id, password_hash FROM users WHERE username = ?", (username,))
+        c.execute("SELECT id, password_hash, is_verified FROM users WHERE username = ?", (username,))
         row = c.fetchone()
         conn.close()
 
         if not row:
             return jsonify({"error": "اسم المستخدم أو كلمة السر غير صحيحة"}), 401
 
-        user_id, pw_hash = row
+        user_id, pw_hash, is_verified = row
         if not verify_password(password, pw_hash):
             add_audit_log("محاولة دخول فاشلة 🚨", f"بيانات خاطئة لـ: {username}")
             return jsonify({"error": "اسم المستخدم أو كلمة السر غير صحيحة"}), 401
+
+        if not is_verified:
+            return jsonify({"error": "EMAIL_NOT_VERIFIED", "message": "يرجى تفعيل حسابك أولاً", "username": username}), 403
 
         session['user_id'] = user_id
         session['username'] = username
@@ -5024,6 +5193,7 @@ def auth_status():
     if 'user_id' in session:
         return jsonify({"loggedIn": True, "username": session.get('username', '')})
     return jsonify({"loggedIn": False})
+
 
 # تأكد أن هذه الأسطر في نهاية الملف تماماً
 init_db() 
