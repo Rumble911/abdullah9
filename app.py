@@ -5196,16 +5196,8 @@ def auth_status():
 
 
 if __name__ == '__main__':
-    import webbrowser
-    import threading
-    import time
-
-    def open_browser():
-        time.sleep(1.5)
-        webbrowser.open("http://127.0.0.1:5000")
-
-    # تشغيل المتصفح تلقائياً في خيط منفصل لتحسين تجربة المستخدم
-    threading.Thread(target=open_browser, daemon=True).start()
+    # الحصول على المنفذ تلقائياً من Render أو استخدام 5000 كافتراضي
+    port = int(os.environ.get("PORT", 5000))
     
-    # يجب إيقاف debug=True عند التحميل بـ PyInstaller لتجنب الـ reloader المزدوج
-    app.run(debug=False, port=5000)
+    # تشغيل التطبيق مع السماح بالاتصال الخارجي (0.0.0.0)
+    app.run(host='0.0.0.0', port=port, debug=False)
