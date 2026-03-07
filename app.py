@@ -369,7 +369,8 @@ def add_audit_log(action, details="", ip="", username=""):
     conn = None
     try:
         conn = get_db_conn()
-        conn.execute("INSERT INTO security_logs (time, action, details, ip, username) VALUES (%s,%s,%s,%s,%s)",
+        _c = conn.cursor()
+        _c.execute("INSERT INTO security_logs (time, action, details, ip, username) VALUES (%s,%s,%s,%s,%s)",
                      (now, action, details, ip, username))
         conn.commit()
     except Exception as e:
@@ -6718,7 +6719,8 @@ def auth_logout():
         conn = None
         try:
             conn = get_db_conn()
-            conn.execute("DELETE FROM active_sessions WHERE token=%s", (token,))
+            _cur = conn.cursor()
+            _cur.execute("DELETE FROM active_sessions WHERE token=%s", (token,))
             conn.commit()
         except Exception as e:
             print(f"[TITAN] Logout error: {e}")
@@ -6734,7 +6736,9 @@ def auth_status():
     if 'user_id' in session:
         user_id = session['user_id']
         conn = get_db_conn()
-        res = conn.execute("SELECT is_admin FROM users WHERE id = %s", (user_id,)).fetchone()
+        _cur = conn.cursor()
+        _cur.execute("SELECT is_admin FROM users WHERE id = %s", (user_id,))
+        res = _cur.fetchone()
         is_admin_flag = bool(res[0]) if res else False
         conn.close()
         return jsonify({"loggedIn": True, "username": session.get('username', ''), "isAdmin": is_admin_flag})
@@ -6847,7 +6851,8 @@ def forgot_password_reset():
     try:
         conn = get_db_conn()
         new_hash = hash_password(new_password)
-        conn.execute("UPDATE users SET password_hash=%s, failed_attempts=0, lockout_until=NULL WHERE username=%s",
+        _cur = conn.cursor()
+        _cur.execute("UPDATE users SET password_hash=%s, failed_attempts=0, lockout_until=NULL WHERE username=%s",
                      (new_hash, username))
         conn.commit()
         del _FORGOT_OTP_STORE[username]
@@ -6959,10 +6964,12 @@ def auth_sessions_revoke():
     try:
         conn = get_db_conn()
         if revoke_all:
-            conn.execute("DELETE FROM active_sessions WHERE user_id=%s", (session['user_id'],))
+            _cur = conn.cursor()
+            _cur.execute("DELETE FROM active_sessions WHERE user_id=%s", (session['user_id'],))
             session.clear()
         elif session_id:
-            conn.execute("DELETE FROM active_sessions WHERE id=%s AND user_id=%s", (session_id, session['user_id']))
+            _cur = conn.cursor()
+            _cur.execute("DELETE FROM active_sessions WHERE id=%s AND user_id=%s", (session_id, session['user_id']))
         conn.commit()
         add_audit_log("إلغاء جلسات", f"أُلغيت الجلسات لـ: {session.get('username','')}", username=session.get('username',''))
         return jsonify({"success": True})
@@ -6988,7 +6995,8 @@ def canary_trap():
     conn = None
     try:
         conn = get_db_conn()
-        conn.execute("INSERT INTO canary_log (time, ip, user_agent) VALUES (%s,%s,%s)", (now, ip, ua[:255]))
+        _cur = conn.cursor()
+        _cur.execute("INSERT INTO canary_log (time, ip, user_agent) VALUES (%s,%s,%s)", (now, ip, ua[:255]))
         conn.commit()
     except Exception as e:
         print(f"[TITAN] Canary DB error: {e}")
@@ -7063,8 +7071,10 @@ def security_integrity_reset():
             new_hash = hashlib.sha256(f.read()).hexdigest()
         now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         conn = get_db_conn()
-        conn.execute("DELETE FROM integrity_baseline WHERE file_path=%s", (app_path,))
-        conn.execute("INSERT INTO integrity_baseline (file_path, hash, set_at) VALUES (%s,%s,%s)", (app_path, new_hash, now))
+        _cur = conn.cursor()
+        _cur.execute("DELETE FROM integrity_baseline WHERE file_path=%s", (app_path,))
+        _cur = conn.cursor()
+        _cur.execute("INSERT INTO integrity_baseline (file_path, hash, set_at) VALUES (%s,%s,%s)", (app_path, new_hash, now))
         conn.commit()
         add_audit_log("Integrity Baseline Reset", f"تم إعادة تعيين baseline بواسطة: {session.get('username','')}")
         return jsonify({"success": True, "message": "تم تحديث baseline بنجاح"})
@@ -7099,8 +7109,10 @@ def security_panic():
 
         # مسح القبو الزمني للمستخدم
         conn = get_db_conn()
-        conn.execute("DELETE FROM vault_timelocked WHERE user_id=%s", (user_id,))
-        conn.execute("DELETE FROM active_sessions WHERE user_id=%s", (user_id,))
+        _cur = conn.cursor()
+        _cur.execute("DELETE FROM vault_timelocked WHERE user_id=%s", (user_id,))
+        _cur = conn.cursor()
+        _cur.execute("DELETE FROM active_sessions WHERE user_id=%s", (user_id,))
         conn.commit()
 
         session.clear()
