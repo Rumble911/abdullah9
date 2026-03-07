@@ -46,6 +46,13 @@ app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['PERMANENT_SESSION_LIFETIME'] = datetime.timedelta(minutes=10)
 
+# --- تهيئة قاعدة البيانات عند بدء التطبيق ---
+with app.app_context():
+    try:
+        init_db()
+    except Exception as _e:
+        print(f"[TITAN] init_db error: {_e}")
+
 # --- قاعدة بيانات المستخدمين (SQLite) ---
 # PostgreSQL - connection via DATABASE_URL env var
 
@@ -7223,6 +7230,5 @@ def vault_timelocked_download():
 
 
 if __name__ == "__main__":
-    init_db()
     port = int(__import__("os").environ.get("PORT", 5000))
     __import__("__main__").app.run(host="0.0.0.0", port=port, debug=False)
