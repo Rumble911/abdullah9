@@ -2405,7 +2405,7 @@ HTML_TEMPLATE = """
 
         // --- نظام التحكم بجلسة الدخول (Auth Control) ---
         async function doLogout() {
-            if (!confirm('هل أنت متأكد من تسجيل الخروج؟')) return;
+            if (!await titanConfirm('هل أنت متأكد من تسجيل الخروج؟')) return;
             try {
                 await fetch('/api/auth/logout', { method: 'POST' });
             } catch(e) {}
@@ -2498,7 +2498,7 @@ HTML_TEMPLATE = """
 
                 if (data.success) {
                     if (data.new_device || data.geo_alert) {
-                        alert('⚠️ تنبيه: تم رصد دخول من جهاز أو موقع جديد. تم إرسال تنبيه إلى بريدك الإلكتروني لضمان أمان حسابك.');
+                        titanAlert('⚠️ تنبيه: تم رصد دخول من جهاز أو موقع جديد. تم إرسال تنبيه إلى بريدك الإلكتروني لضمان أمان حسابك.');
                     }
                     btn.textContent = '✅ تم الدخول بنجاح!';
                     btn.style.background = 'linear-gradient(135deg,#22c55e,#16a34a)';
@@ -2616,7 +2616,7 @@ HTML_TEMPLATE = """
                 const data = await res.json();
 
                 if (data.success) {
-                    alert('✅ تم تفعيل حسابك بنجاح! يمكنك الآن تسجيل الدخول.');
+                    titanAlert('✅ تم تفعيل حسابك بنجاح! يمكنك الآن تسجيل الدخول.');
                     switchAuthTab('login');
                     document.getElementById('auth-login-user').value = username;
                     document.getElementById('auth-login-pass').focus();
@@ -2679,7 +2679,7 @@ HTML_TEMPLATE = """
                     const res = await fetch('/api/auth/heartbeat', {method: 'POST'});
                     if (res.status === 401) {
                         clearInterval(heartbeatInterval);
-                        alert('انتهت صلاحية جلستك (خمول تام)، تم تسجيل خروجك لأسباب أمنية.');
+                        titanAlert('انتهت صلاحية جلستك (خمول تام)، تم تسجيل خروجك لأسباب أمنية.');
                         window.location.reload();
                     }
                 } catch(e) {}
@@ -2789,15 +2789,15 @@ HTML_TEMPLATE = """
         }
 
         async function doPanic() {
-            if (!confirm('🚨 خيار الدمار شامل! هذا سيشفر كامل بيانات القبو بمفتاح عشوائي جديد ويحذفه للأبد! لن تتمكن من استرجاع البيانات أبداً! متأكد؟')) return;
+            if (!await titanConfirm('🚨 خيار الدمار شامل! هذا سيشفر كامل بيانات القبو بمفتاح عشوائي جديد ويحذفه للأبد! لن تتمكن من استرجاع البيانات أبداً! متأكد؟')) return;
             try {
                 const res = await fetch('/api/security/panic', {method:'POST'});
                 const data = await res.json();
                 if (data.success) {
-                    alert('💥 تم محو البيانات وتدمير الجلسات بنجاح. سيتم تسجيل الخروج فوراً.');
+                    titanAlert('💥 تم محو البيانات وتدمير الجلسات بنجاح. سيتم تسجيل الخروج فوراً.');
                     window.location.reload();
-                } else { alert(data.error); }
-            } catch(e) { alert('فشل الاتصال بمفرقعات الأمان 💣'); }
+                } else { titanAlert(data.error); }
+            } catch(e) { titanAlert('فشل الاتصال بمفرقعات الأمان 💣'); }
         }
 
         async function checkIntegrity() {
@@ -2817,11 +2817,11 @@ HTML_TEMPLATE = """
         }
 
         async function resetBaseline() {
-            if(!confirm('هل أنت متأكد من أن الكود الحالي نظيف وموثوق وتريد تعيينه كأساسيات رسمية للمستقبل؟')) return;
+            if(!await titanConfirm('هل أنت متأكد من أن الكود الحالي نظيف وموثوق وتريد تعيينه كأساسيات رسمية للمستقبل؟')) return;
             try {
                 const res = await fetch('/api/security/integrity/reset', {method:'POST'});
                 const data = await res.json();
-                if(data.success) { alert('✅ تم تحديث أساس الفحص للملفات الحالية وتوثيقها.'); checkIntegrity(); }
+                if(data.success) { titanAlert('✅ تم تحديث أساس الفحص للملفات الحالية وتوثيقها.'); checkIntegrity(); }
             } catch(e) {}
         }
 
@@ -2863,7 +2863,7 @@ HTML_TEMPLATE = """
         }
 
         async function regenerateBackupCodes() {
-            if(!confirm('هل أنت متأكد؟ سيؤدي ذلك إلى إلغاء جميع أكواد الطوارئ القديمة وتوليد 8 أكواد جديدة.')) return;
+            if(!await titanConfirm('هل أنت متأكد؟ سيؤدي ذلك إلى إلغاء جميع أكواد الطوارئ القديمة وتوليد 8 أكواد جديدة.')) return;
             
             try {
                 const res = await fetch('/api/auth/backup-codes/regenerate', {method:'POST'});
@@ -2880,10 +2880,10 @@ HTML_TEMPLATE = """
                     document.getElementById('backup-codes-modal').style.display = 'flex';
                     soundManager.success();
                 } else {
-                    alert(data.error || 'فشل توليد الأكواد');
+                    titanAlert(data.error || 'فشل توليد الأكواد');
                 }
             } catch(e) {
-                alert('فشل الاتصال بالخادم');
+                titanAlert('فشل الاتصال بالخادم');
             }
         }
 
@@ -2920,10 +2920,10 @@ HTML_TEMPLATE = """
         }
         
         async function revokeAllSessions() {
-            if(!confirm('هذا سيخرجك من جميع الأجهزة النشطة. متأكد؟')) return;
+            if(!await titanConfirm('هذا سيخرجك من جميع الأجهزة النشطة. متأكد؟')) return;
             try {
                 await fetch('/api/auth/sessions/revoke', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({all:true})});
-                alert('تم تسجيل الخروج من كل الأجهزة.'); 
+                titanAlert('تم تسجيل الخروج من كل الأجهزة.'); 
                 loadActiveSessions();
             } catch(e) {}
         }
@@ -3040,7 +3040,7 @@ HTML_TEMPLATE = """
             });
             if (!res.ok) {
                 const data = await res.json();
-                alert(data.error || 'فشل التنزيل'); return;
+                titanAlert(data.error || 'فشل التنزيل'); return;
             }
             const blob = await res.blob();
             const downloadUrl = window.URL.createObjectURL(blob);
@@ -3188,16 +3188,16 @@ HTML_TEMPLATE = """
         async function processText(action) {
             const text = document.getElementById('cryptText').value;
             const key = document.getElementById('cryptKey').value;
-            if(!text || !key) return alert("يرجى إدخال النص وكلمة السر!");
+            if(!text || !key) return titanAlert("يرجى إدخال النص وكلمة السر!");
             const res = await fetch('/crypt-text', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({text, key, action}) });
             const data = await res.json();
-            if(data.error) alert(data.error); else document.getElementById('cryptText').value = data.result;
+            if(data.error) titanAlert(data.error); else document.getElementById('cryptText').value = data.result;
         }
 
         async function processFile(action) {
             const file = document.getElementById('fileInput').files[0];
             const key = document.getElementById('cryptKey').value;
-            if(!file || !key) return alert("يرجى اختيار ملف وإدخال كلمة السر!");
+            if(!file || !key) return titanAlert("يرجى اختيار ملف وإدخال كلمة السر!");
             const formData = new FormData();
             formData.append('file', file);
             formData.append('key', key);
@@ -3213,7 +3213,7 @@ HTML_TEMPLATE = """
                 a.click();
             } else {
                 soundManager.error();
-                const err = await res.json(); alert(err.error);
+                const err = await res.json(); titanAlert(err.error);
             }
         }
 
@@ -3226,7 +3226,7 @@ HTML_TEMPLATE = """
 
         function copyPass() {
             navigator.clipboard.writeText(document.getElementById('suggested-pass').innerText);
-            alert("تم النسخ!");
+            titanAlert("تم النسخ!");
         }
         async function checkIP() {
             let ip = document.getElementById('ipInput').value.trim();
@@ -3283,7 +3283,7 @@ HTML_TEMPLATE = """
         async function verify2FA() {
             const secret = document.getElementById('tfaSecret').innerText;
             const code = document.getElementById('tfaCodeInput').value;
-            if(!secret || !code) return alert("الرجاء إدخال الرمز للتحقق!");
+            if(!secret || !code) return titanAlert("الرجاء إدخال الرمز للتحقق!");
             
             const res = await fetch('/api/2fa/verify', {
                 method: 'POST',
@@ -3293,10 +3293,10 @@ HTML_TEMPLATE = """
             const data = await res.json();
             if(data.valid) {
                 soundManager.success();
-                alert("✅ الرمز صحيح! المصادقة ناجحة.");
+                titanAlert("✅ الرمز صحيح! المصادقة ناجحة.");
             } else {
                 soundManager.error();
-                alert("❌ الرمز خاطئ أو منتهي الصلاحية.");
+                titanAlert("❌ الرمز خاطئ أو منتهي الصلاحية.");
             }
         }
 
@@ -3396,7 +3396,7 @@ HTML_TEMPLATE = """
 
         async function unlockVault() {
             const key = document.getElementById('vaultMasterKey').value;
-            if(!key) return alert("أدخل كلمة السر الرئيسية!");
+            if(!key) return titanAlert("أدخل كلمة السر الرئيسية!");
             
             const res = await fetch('/api/vault/load', {
                 method: 'POST',
@@ -3413,7 +3413,7 @@ HTML_TEMPLATE = """
                     triggerVaultLockout();
                     vaultFailedAttempts = 0;
                 } else {
-                    alert(`❌ كلمة السر خاطئة! تحذير: ${remaining} محاولة متبقية قبل تجميد النظام.`);
+                    titanAlert(`❌ كلمة السر خاطئة! تحذير: ${remaining} محاولة متبقية قبل تجميد النظام.`);
                 }
             } else {
                 soundManager.success();
@@ -3433,7 +3433,7 @@ HTML_TEMPLATE = """
             document.getElementById('vault-login').classList.remove('hidden');
             document.getElementById('vault-content').classList.add('hidden');
             document.getElementById('vaultItemsContainer').innerHTML = "";
-            if(!silent) alert("🔒 تم إغلاق القبو بنجاح.");
+            if(!silent) titanAlert("🔒 تم إغلاق القبو بنجاح.");
         }
 
         async function saveVault() {
@@ -3444,7 +3444,7 @@ HTML_TEMPLATE = """
                 body: JSON.stringify({ key: currentMasterKey, vault: vaultData })
             });
             const data = await res.json();
-            if(data.error) alert("طأ في حفظ القبو: " + data.error);
+            if(data.error) titanAlert("طأ في حفظ القبو: " + data.error);
         }
 
         function addVaultItem() {
@@ -3452,7 +3452,7 @@ HTML_TEMPLATE = """
             const username = document.getElementById('vaultItemUsername').value;
             const password = document.getElementById('vaultItemPass').value;
             
-            if(!title || !password) return alert("يجب إدخال العنوان وكلمة السر على الأقل!");
+            if(!title || !password) return titanAlert("يجب إدخال العنوان وكلمة السر على الأقل!");
             
             vaultData.push({ title, username, password, date: new Date().toISOString().split('T')[0] });
             
@@ -3516,7 +3516,7 @@ HTML_TEMPLATE = """
                 a.download = "vault_backup.titan.bak";
                 a.click();
             } else {
-                alert("فشل تصدير النسخة!");
+                titanAlert("فشل تصدير النسخة!");
             }
         }
 
@@ -3526,10 +3526,10 @@ HTML_TEMPLATE = """
             formData.append('file', input.files[0]);
             const res = await fetch('/api/vault/restore', { method: 'POST', body: formData });
             if (res.ok) {
-                alert("تم استعادة النسخة بنجاح! يرجى إدخال كلمة السر لفتح القبو.");
+                titanAlert("تم استعادة النسخة بنجاح! يرجى إدخال كلمة السر لفتح القبو.");
                 lockVault();
             } else {
-                alert("فشل استعادة النسخة!");
+                titanAlert("فشل استعادة النسخة!");
             }
         }
 
@@ -3544,7 +3544,7 @@ HTML_TEMPLATE = """
                 document.getElementById('vault-auth-mode').classList.add('hidden');
                 document.getElementById('vault-recover-mode').classList.remove('hidden');
             } catch (e) {
-                alert(e.message);
+                titanAlert(e.message);
                 soundManager.error();
             }
         }
@@ -3640,7 +3640,7 @@ HTML_TEMPLATE = """
                 });
                 const data = await res.json();
                 if (data.success) {
-                    alert('✅ تم إعادة تعيين كلمة سر القبو بنجاح! يمكنك الآن تسجيل الدخول.');
+                    titanAlert('✅ تم إعادة تعيين كلمة سر القبو بنجاح! يمكنك الآن تسجيل الدخول.');
                     closeVaultForgot();
                     soundManager.success();
                 } else {
@@ -3666,17 +3666,17 @@ HTML_TEMPLATE = """
             const btn = document.getElementById('admin-nuke-btn');
             
             if (!confirmBox.checked) {
-                alert('🚨 يجب تأكيد الموافقة أولاً بالضغط على المربع.');
+                titanAlert('🚨 يجب تأكيد الموافقة أولاً بالضغط على المربع.');
                 return;
             }
             
             const pass = prompt('SECURITY CHALLENGE: أدخل كلمة سر الادمن root لتأكيد المسح الشامل:');
             if (pass !== 'Facebook123@@') {
-                alert('❌ كلمة سر خاطئة! تم إلغاء العملية.');
+                titanAlert('❌ كلمة سر خاطئة! تم إلغاء العملية.');
                 return;
             }
             
-            if (!confirm('⚠️ تحذير نهائي: هل أنت متأكد من مسح جميع البيانات؟ هذا الإجراء لا يمكن التراجع عنه!')) return;
+            if (!await titanConfirm('⚠️ تحذير نهائي: هل أنت متأكد من مسح جميع البيانات؟ هذا الإجراء لا يمكن التراجع عنه!')) return;
             
             btn.disabled = true;
             btn.innerText = '☢️ جاري المسح الشامل...';
@@ -3706,7 +3706,7 @@ HTML_TEMPLATE = """
         async function executeRecovery() {
             const a1 = document.getElementById('rec-a1').value;
             const a2 = document.getElementById('rec-a2').value;
-            if(!a1 || !a2) return alert("الرجاء إدخال الإجابات!");
+            if(!a1 || !a2) return titanAlert("الرجاء إدخال الإجابات!");
             
             try {
                 const res = await fetch('/api/vault/recovery/recover', {
@@ -3718,11 +3718,11 @@ HTML_TEMPLATE = """
                 
                 document.getElementById('vaultMasterKey').value = data.recovered_key;
                 soundManager.success();
-                alert("✅ تم استرجاع كلمة السر بنجاح! يتم فتح القبو الآن.");
+                titanAlert("✅ تم استرجاع كلمة السر بنجاح! يتم فتح القبو الآن.");
                 hideRecoveryMode();
                 unlockVault(); // Auto-unlock with the recovered key
             } catch(e) {
-                alert(e.message);
+                titanAlert(e.message);
                 soundManager.error();
             }
         }
@@ -3737,7 +3737,7 @@ HTML_TEMPLATE = """
             const q2 = document.getElementById('setup-q2').value;
             const a2 = document.getElementById('setup-a2').value;
             
-            if(!q1 || !a1 || !q2 || !a2) return alert("جميع حقول أسئلة الأمان وإجاباتها مطلوبة!");
+            if(!q1 || !a1 || !q2 || !a2) return titanAlert("جميع حقول أسئلة الأمان وإجاباتها مطلوبة!");
             
             try {
                 const res = await fetch('/api/vault/recovery/setup', {
@@ -3747,11 +3747,11 @@ HTML_TEMPLATE = """
                 const data = await res.json();
                 if(data.error) throw new Error(data.error);
                 
-                alert("✅ تم إعداد أسئلة استعادة كلمة السر بنجاح للمستقبل.");
+                titanAlert("✅ تم إعداد أسئلة استعادة كلمة السر بنجاح للمستقبل.");
                 document.getElementById('setup-recovery-container').classList.add('hidden');
                 soundManager.success();
             } catch (e) {
-                alert(e.message);
+                titanAlert(e.message);
                 soundManager.error();
             }
         }
@@ -3774,7 +3774,7 @@ HTML_TEMPLATE = """
         async function processPdf(action) {
             const file = document.getElementById('pdfFileInput').files[0];
             const password = document.getElementById('pdfPass').value;
-            if(!file || !password) return alert("الرجاء اختيار ملف PDF وإدخال كلمة سر المكونة منه!");
+            if(!file || !password) return titanAlert("الرجاء اختيار ملف PDF وإدخال كلمة سر المكونة منه!");
             
             const formData = new FormData();
             formData.append('file', file);
@@ -3797,7 +3797,7 @@ HTML_TEMPLATE = """
                     throw new Error(data.error || "خطأ غير معروف (ربما كلمة السر التي أدخلتها خاطئة!)");
                 }
             } catch (e) {
-                alert(e.message);
+                titanAlert(e.message);
                 soundManager.error();
             }
         }
@@ -3879,7 +3879,7 @@ HTML_TEMPLATE = """
 
         async function checkPhishing() {
             const email = document.getElementById('phishUrlInput').value;
-            if(!email || !email.includes('@')) return alert("الرجاء إدخال بريد إلكتروني صحيح");
+            if(!email || !email.includes('@')) return titanAlert("الرجاء إدخال بريد إلكتروني صحيح");
             const resBox = document.getElementById('phishResult');
             resBox.classList.remove('hidden');
             resBox.innerHTML = '<span class="text-orange-400 animate-pulse text-xs font-mono">جاري فحص سمعة البريد الإلكتروني عبر IPQualityScore...</span>';
@@ -3935,7 +3935,7 @@ HTML_TEMPLATE = """
         async function checkEmailPassLeak() {
             const email = document.getElementById('leakEmailInput').value;
             const password = document.getElementById('leakPassInput').value;
-            if(!email || !password) return alert("الرجاء إدخال البريد الإلكتروني وكلمة السر بشكل صحيح");
+            if(!email || !password) return titanAlert("الرجاء إدخال البريد الإلكتروني وكلمة السر بشكل صحيح");
             
             const resBox = document.getElementById('leakEmailPassResult');
             resBox.classList.remove('hidden');
@@ -4042,7 +4042,7 @@ HTML_TEMPLATE = """
 
         async function checkPhone() {
             const phone = document.getElementById('phoneInput').value;
-            if(!phone) return alert("الرجاء إدخال رقم الهاتف");
+            if(!phone) return titanAlert("الرجاء إدخال رقم الهاتف");
             const resBox = document.getElementById('phoneResult');
             resBox.classList.remove('hidden');
             resBox.innerHTML = '<span class="text-yellow-400 animate-pulse text-xs font-mono">جاري فحص الرقم عبر IPQualityScore...</span>';
@@ -4105,7 +4105,7 @@ HTML_TEMPLATE = """
 
         async function checkUrl() {
             const url = document.getElementById('urlInput').value;
-            if(!url || (!url.startsWith('http://') && !url.startsWith('https://'))) return alert("الرجاء إدخال رابط صحيح يبدأ بـ http:// أو https://");
+            if(!url || (!url.startsWith('http://') && !url.startsWith('https://'))) return titanAlert("الرجاء إدخال رابط صحيح يبدأ بـ http:// أو https://");
             const resBox = document.getElementById('urlResult');
             resBox.classList.remove('hidden');
             resBox.innerHTML = '<span class="text-blue-400 animate-pulse text-xs font-mono">جاري فحص الرابط عبر IPQualityScore...</span>';
@@ -4222,7 +4222,7 @@ HTML_TEMPLATE = """
 
         async function checkMalwareUrl() {
             const url = document.getElementById('malwareUrlInput').value;
-            if(!url || (!url.startsWith('http://') && !url.startsWith('https://'))) return alert("الرجاء إدخال رابط صحيح يبدأ بـ http:// أو https://");
+            if(!url || (!url.startsWith('http://') && !url.startsWith('https://'))) return titanAlert("الرجاء إدخال رابط صحيح يبدأ بـ http:// أو https://");
             const resBox = document.getElementById('malwareResult');
             resBox.classList.remove('hidden');
             resBox.innerHTML = '<span class="text-rose-400 animate-pulse text-xs font-mono">جاري فحص الرابط للبرمجيات الخبيثة عبر IPQualityScore...</span>';
@@ -4243,11 +4243,11 @@ HTML_TEMPLATE = """
 
         async function checkMalwareFile() {
              const fileInput = document.getElementById('malwareFileInput');
-             if(!fileInput.files.length) return alert("الرجاء اختيار ملف للفحص");
+             if(!fileInput.files.length) return titanAlert("الرجاء اختيار ملف للفحص");
              
              const file = fileInput.files[0];
              // Limit check (e.g. 15MB) since IPQualityScore free typically limits file size
-             if (file.size > 15 * 1024 * 1024) return alert("حجم الملف كبير جداً. الحد الأقصى 15 ميجابايت.");
+             if (file.size > 15 * 1024 * 1024) return titanAlert("حجم الملف كبير جداً. الحد الأقصى 15 ميجابايت.");
              
             const resBox = document.getElementById('malwareResult');
             resBox.classList.remove('hidden');
@@ -4316,7 +4316,7 @@ HTML_TEMPLATE = """
 
         async function createBurnNote() {
             const text = document.getElementById('burnNoteText').value;
-            if(!text) return alert("يرجى كتابة رسالة الصندوق قبل التوليد!");
+            if(!text) return titanAlert("يرجى كتابة رسالة الصندوق قبل التوليد!");
             
             try {
                 const res = await fetch('/api/burn-note/create', {
@@ -4332,7 +4332,7 @@ HTML_TEMPLATE = """
                 soundManager.success();
                 refreshLogs();
             } catch (e) {
-                alert("خطأ: " + e.message);
+                titanAlert("خطأ: " + e.message);
                 soundManager.error();
             }
         }
@@ -4374,7 +4374,7 @@ HTML_TEMPLATE = """
                         refreshLogs();
                     } else { 
                         const errData = await res.json();
-                        alert("خطأ في تشفير الصورة: " + (errData.error || "خطأ غير معروف")); 
+                        titanAlert("خطأ في تشفير الصورة: " + (errData.error || "خطأ غير معروف")); 
                     }
                 };
                 fileInput.click();
@@ -4387,7 +4387,7 @@ HTML_TEMPLATE = """
                     formData.append('file', fileInput.files[0]);
                     const res = await fetch('/api/steganography/decode', { method: 'POST', body: formData });
                     const data = await res.json();
-                    alert("النص المستخرج: " + (data.result || "لا توجد بيانات"));
+                    titanAlert("النص المستخرج: " + (data.result || "لا توجد بيانات"));
                     refreshLogs();
                 };
                 fileInput.click();
@@ -4420,7 +4420,7 @@ HTML_TEMPLATE = """
 
         async function toggleFim(action) {
             const target = document.getElementById('fimTargetPath').value;
-            if(action === 'start' && !target) return alert("الرجاء إدخال مسار الملف للمراقبة");
+            if(action === 'start' && !target) return titanAlert("الرجاء إدخال مسار الملف للمراقبة");
             
             try {
                 const res = await fetch('/api/defense/fim', {
@@ -4442,7 +4442,7 @@ HTML_TEMPLATE = """
                 }
                 refreshLogs();
             } catch(e) {
-                alert("خطأ: " + e.message);
+                titanAlert("خطأ: " + e.message);
                 soundManager.error();
             }
         }
@@ -4486,7 +4486,7 @@ HTML_TEMPLATE = """
             const roomId = document.getElementById('burnChatId').value.trim();
             const user = document.getElementById('burnChatUser').value.trim() || 'Anonymous';
             
-            if(!roomId) return alert("الرجاء إدخال رقم الغرفة للاتصال المشفر!");
+            if(!roomId) return titanAlert("الرجاء إدخال رقم الغرفة للاتصال المشفر!");
             
             currentRoomId = roomId;
             currentUser = user;
@@ -4750,7 +4750,7 @@ HTML_TEMPLATE = """
                 });
                 const data = await res.json();
                 if (data.success) {
-                    alert('✅ تم تغيير كلمة السر بنجاح! يمكنك الآن تسجيل الدخول.');
+                    titanAlert('✅ تم تغيير كلمة السر بنجاح! يمكنك الآن تسجيل الدخول.');
                     switchAuthTab('login');
                     // Reset all forgot steps
                     document.getElementById('forgot-step1').style.display = 'block';
@@ -4840,16 +4840,67 @@ HTML_TEMPLATE = """
             } catch(e) {}
         }
 
+
+        // ===== TITAN Notification System =====
+        function titanAlert(msg, type='info') {
+            const colors = {
+                info: 'from-blue-900 border-blue-500 text-blue-200',
+                success: 'from-green-900 border-green-500 text-green-200',
+                error: 'from-red-900 border-red-500 text-red-200',
+                warning: 'from-yellow-900 border-yellow-500 text-yellow-200',
+            };
+            const icons = { info: '🛡️', success: '✅', error: '🚨', warning: '⚠️' };
+            const div = document.createElement('div');
+            div.innerHTML = `
+                <div class="fixed top-6 left-1/2 -translate-x-1/2 z-[9999] animate-bounce-once">
+                    <div class="bg-gradient-to-br ${colors[type]} border rounded-2xl shadow-2xl px-8 py-5 min-w-[320px] max-w-[500px] flex flex-col items-center gap-3">
+                        <div class="flex items-center gap-3 w-full">
+                            <span class="text-2xl">${icons[type]}</span>
+                            <span class="font-black text-sm tracking-widest uppercase opacity-70">TITAN SEC</span>
+                        </div>
+                        <p class="text-center font-semibold text-sm leading-relaxed">${msg}</p>
+                        <button onclick="this.closest('.fixed').remove()" class="mt-1 px-6 py-1.5 bg-white/10 hover:bg-white/20 rounded-xl text-xs font-bold transition-all">OK</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(div.firstElementChild);
+            setTimeout(() => div.firstElementChild?.remove(), 5000);
+        }
+
+        function titanConfirm(msg) {
+            return new Promise(resolve => {
+                const div = document.createElement('div');
+                div.innerHTML = `
+                    <div class="fixed inset-0 bg-black/70 z-[9999] flex items-center justify-center">
+                        <div class="bg-gradient-to-br from-slate-900 border border-red-500/50 rounded-2xl shadow-2xl px-8 py-6 min-w-[320px] max-w-[480px] flex flex-col items-center gap-4">
+                            <div class="flex items-center gap-3">
+                                <span class="text-2xl">🛡️</span>
+                                <span class="font-black text-sm tracking-widest uppercase text-red-400">TITAN SEC</span>
+                            </div>
+                            <p class="text-center text-gray-200 font-semibold text-sm leading-relaxed">${msg}</p>
+                            <div class="flex gap-3 mt-1">
+                                <button id="tc-yes" class="px-6 py-2 bg-red-600 hover:bg-red-500 rounded-xl text-white font-bold text-sm transition-all">تأكيد</button>
+                                <button id="tc-no" class="px-6 py-2 bg-slate-700 hover:bg-slate-600 rounded-xl text-gray-300 font-bold text-sm transition-all">إلغاء</button>
+                            </div>
+                        </div>
+                    </div>`;
+                const el = div.firstElementChild;
+                document.body.appendChild(el);
+                el.querySelector('#tc-yes').onclick = () => { el.remove(); resolve(true); };
+                el.querySelector('#tc-no').onclick = () => { el.remove(); resolve(false); };
+            });
+        }
+        // ===== END TITAN Notifications =====
+
         async function generateQR() {
             const text = document.getElementById('qrText').value.trim();
             const pass = document.getElementById('qrPass').value;
-            if(!text) { alert('أدخل النص'); return; }
+            if(!text) { titanAlert('أدخل النص'); return; }
             const res = await fetch('/api/qr/generate', {
                 method:'POST', headers:{'Content-Type':'application/json'},
                 body: JSON.stringify({text, password: pass})
             });
             const d = await res.json();
-            if(d.error) { alert(d.error); return; }
+            if(d.error) { titanAlert(d.error); return; }
             const src = 'data:image/png;base64,' + d.qr;
             document.getElementById('qrImg').src = src;
             document.getElementById('qrDownload').href = src;
@@ -4859,7 +4910,7 @@ HTML_TEMPLATE = """
         async function decodeQR() {
             const file = document.getElementById('qrFile').files[0];
             const pass = document.getElementById('qrDecodePass').value;
-            if(!file) { alert('اختر صورة'); return; }
+            if(!file) { titanAlert('اختر صورة'); return; }
             const form = new FormData();
             form.append('file', file);
             form.append('password', pass);
@@ -4938,7 +4989,7 @@ HTML_TEMPLATE = """
                 soundManager.terminalType();
                 soundManager.success();
             } catch (err) {
-                alert("تعذر توليد الهوية: " + err.message);
+                titanAlert("تعذر توليد الهوية: " + err.message);
                 soundManager.error();
                 resArea.style.opacity = '1';
             }
@@ -5028,7 +5079,7 @@ UUID: ${getVal('idUuid')}
                 const text = document.getElementById('audioSecretText').value.trim();
                 
                 if (!file || !text) {
-                    return alert('يرجى اختيار ملف صوتي وكتابة النص السري المراد إخفاؤه.');
+                    return titanAlert('يرجى اختيار ملف صوتي وكتابة النص السري المراد إخفاؤه.');
                 }
                 
                 console.log('جاري المعالجة...');
@@ -5051,18 +5102,18 @@ UUID: ${getVal('idUuid')}
                     document.body.appendChild(downloadAnchor);
                     downloadAnchor.click();
                     
-                    alert('تم التشفير والتحميل تلقائياً ✅');
+                    titanAlert('تم التشفير والتحميل تلقائياً ✅');
                     
                     setTimeout(() => {
                         document.body.removeChild(downloadAnchor);
                         window.URL.revokeObjectURL(downloadUrl);
                     }, 500);
                 } catch (error) {
-                    alert('خطأ: ' + error.message);
+                    titanAlert('خطأ: ' + error.message);
                 }
             } else {
                 const file = document.getElementById('audioFileDecrypt').files[0];
-                if (!file) return alert('يرجى اختيار الملف المراد فحصه.');
+                if (!file) return titanAlert('يرجى اختيار الملف المراد فحصه.');
                 
                 console.log('جاري التحليل...');
                 formData.append('file', file);
@@ -5072,15 +5123,15 @@ UUID: ${getVal('idUuid')}
                     const data = await res.json();
                     
                     if (data.error) {
-                        alert('تنبيه: ' + data.error);
+                        titanAlert('تنبيه: ' + data.error);
                     } else if (data.success && data.hidden_data) {
                         document.getElementById('audioDecodedResult').innerText = data.hidden_data;
-                        alert('✅ تم العثور على نص مخفي!');
+                        titanAlert('✅ تم العثور على نص مخفي!');
                     } else {
-                        alert('لم يتم العثور على بيانات مخفية.');
+                        titanAlert('لم يتم العثور على بيانات مخفية.');
                     }
                 } catch (error) {
-                    alert('خطأ في الاتصال بالخادم.');
+                    titanAlert('خطأ في الاتصال بالخادم.');
                 }
             }
         }
@@ -5102,8 +5153,8 @@ UUID: ${getVal('idUuid')}
                 document.body.appendChild(a);
                 a.click();
 
-                alert('تم التنظيف بنجاح، تم تحميل الملف النظيف.');
-            } catch (e) { alert('خطأ: ' + e.message); }
+                titanAlert('تم التنظيف بنجاح، تم تحميل الملف النظيف.');
+            } catch (e) { titanAlert('خطأ: ' + e.message); }
         }
 
         function generateStealthFingerprint() {
@@ -6231,9 +6282,21 @@ def qr_decode():
         if not file: return jsonify({'error': 'الصورة مطلوبة'}), 400
 
         from PIL import Image as PILImage # type: ignore
-        from pyzbar import pyzbar  # type: ignore
+        try:
+            from pyzbar import pyzbar as _pyzbar
+            _use_pyzbar = True
+        except ImportError:
+            _use_pyzbar = False
         img = PILImage.open(file)
-        decoded = pyzbar.decode(img)
+        if _use_pyzbar:
+            decoded = _pyzbar.decode(img)
+        else:
+            # fallback: use qrcode detector via PIL color scan
+            import cv2, numpy as np
+            img_np = np.array(img.convert('RGB'))
+            detector = cv2.QRCodeDetector()
+            val, _, _ = detector.detectAndDecode(img_np)
+            decoded = [type('obj', (object,), {'data': val.encode()})() ] if val else []
         if not decoded: return jsonify({'error': 'لم يتم التعرف على QR في الصورة'}), 400
 
         payload = decoded[0].data.decode('utf-8')
