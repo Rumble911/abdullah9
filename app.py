@@ -2514,7 +2514,7 @@ HTML_TEMPLATE = """
                     vErr.textContent = 'حسابك غير مفعل، يرجى إدخال كود التحقق المرسل لإيميلك.';
                     vErr.style.display = 'block';
                 } else if (data.error === 'ACCOUNT_LOCKED') {
-                    errEl.innerHTML = `🚨 حسابك مقفل مؤقتاً!<br>بسبب محاولات فاشلة. حاول مجدداً بعد <span class="font-bold font-mono text-red-300">${data.minutes_remaining} دقيقة</span>.`;
+                    errEl.innerHTML = `🚨 حسابك مقفل مؤقتاً!<br>بسبب محاولات فاشلة. حاول مجدداً بعد <span class="font-bold font-mono text-red-300">${data.minutes || data.minutes_remaining || "?"} دقيقة</span>.`;
                     errEl.style.background = 'rgba(239, 68, 68, 0.3)';
                     errEl.style.border = '1px solid rgba(239, 68, 68, 0.8)';
                     errEl.style.display = 'block';
@@ -4842,8 +4842,67 @@ HTML_TEMPLATE = """
 
 
         // ===== TITAN Notification System =====
-        function titanAlert(msg) { alert('[ TITAN SEC ] ' + msg); }
-        function titanConfirm(msg) { return Promise.resolve(confirm('[ TITAN SEC ] ' + msg)); }
+        function titanAlert(msg, type='info') {
+            const existing = document.getElementById('titan-toast');
+            if(existing) existing.remove();
+            const colors = {info:'#3b82f6', success:'#22c55e', error:'#ef4444', warning:'#f59e0b'};
+            const color = colors[type] || colors.info;
+            const toast = document.createElement('div');
+            toast.id = 'titan-toast';
+            toast.style.cssText = `
+                position:fixed; top:24px; left:50%; transform:translateX(-50%);
+                background:#0f172a; border:1px solid ${color}; border-radius:14px;
+                padding:16px 28px; z-index:99999; min-width:320px; max-width:500px;
+                box-shadow:0 0 30px ${color}44; text-align:center; font-family:monospace;
+                animation: fadeInDown 0.3s ease;
+            `;
+            toast.innerHTML = `
+                <div style="color:${color};font-size:11px;font-weight:900;letter-spacing:3px;margin-bottom:8px;">
+                    &#9632; TITAN SEC &#9632;
+                </div>
+                <div style="color:#e2e8f0;font-size:14px;line-height:1.6;">${msg}</div>
+                <button onclick="document.getElementById('titan-toast').remove()"
+                    style="margin-top:12px;padding:4px 20px;background:${color}22;border:1px solid ${color}55;
+                    color:${color};border-radius:8px;cursor:pointer;font-size:12px;font-family:monospace;">
+                    OK
+                </button>`;
+            document.body.appendChild(toast);
+            setTimeout(() => toast?.remove(), 4000);
+        }
+
+        function titanConfirm(msg) {
+            return new Promise(resolve => {
+                const existing = document.getElementById('titan-confirm');
+                if(existing) existing.remove();
+                const overlay = document.createElement('div');
+                overlay.id = 'titan-confirm';
+                overlay.style.cssText = `
+                    position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:99999;
+                    display:flex;align-items:center;justify-content:center;`;
+                overlay.innerHTML = `
+                    <div style="background:#0f172a;border:1px solid #ef444488;border-radius:16px;
+                        padding:28px 36px;min-width:320px;max-width:460px;text-align:center;font-family:monospace;
+                        box-shadow:0 0 40px #ef444422;">
+                        <div style="color:#ef4444;font-size:11px;font-weight:900;letter-spacing:3px;margin-bottom:12px;">
+                            &#9632; TITAN SEC &#9632;
+                        </div>
+                        <div style="color:#e2e8f0;font-size:14px;line-height:1.6;margin-bottom:20px;">${msg}</div>
+                        <div style="display:flex;gap:12px;justify-content:center;">
+                            <button id="tc-yes" style="padding:8px 24px;background:#ef4444;border:none;color:white;
+                                border-radius:8px;cursor:pointer;font-weight:bold;font-family:monospace;">تأكيد</button>
+                            <button id="tc-no" style="padding:8px 24px;background:#1e293b;border:1px solid #334155;
+                                color:#94a3b8;border-radius:8px;cursor:pointer;font-family:monospace;">إلغاء</button>
+                        </div>
+                    </div>`;
+                document.body.appendChild(overlay);
+                overlay.querySelector('#tc-yes').onclick = () => { overlay.remove(); resolve(true); };
+                overlay.querySelector('#tc-no').onclick = () => { overlay.remove(); resolve(false); };
+            });
+        }
+
+        const style = document.createElement('style');
+        style.textContent = '@keyframes fadeInDown{from{opacity:0;transform:translateX(-50%) translateY(-20px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}';
+        document.head.appendChild(style);
         // ===== END TITAN Notifications =====
 
         async function generateQR() {
