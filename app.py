@@ -4842,8 +4842,8 @@ HTML_TEMPLATE = """
 
 
         // ===== TITAN Notification System =====
-        function titanAlert(msg) { alert('🛡️ TITAN SEC\n\n' + msg); }
-        function titanConfirm(msg) { return Promise.resolve(confirm('🛡️ TITAN SEC\n\n' + msg)); }
+        function titanAlert(msg) { alert('[ TITAN SEC ] ' + msg); }
+        function titanConfirm(msg) { return Promise.resolve(confirm('[ TITAN SEC ] ' + msg)); }
         // ===== END TITAN Notifications =====
 
         async function generateQR() {
