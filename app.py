@@ -4842,53 +4842,8 @@ HTML_TEMPLATE = """
 
 
         // ===== TITAN Notification System =====
-        function titanAlert(msg, type='info') {
-            const colors = {
-                info: 'from-blue-900 border-blue-500 text-blue-200',
-                success: 'from-green-900 border-green-500 text-green-200',
-                error: 'from-red-900 border-red-500 text-red-200',
-                warning: 'from-yellow-900 border-yellow-500 text-yellow-200',
-            };
-            const icons = { info: '🛡️', success: '✅', error: '🚨', warning: '⚠️' };
-            const div = document.createElement('div');
-            div.innerHTML = `
-                <div class="fixed top-6 left-1/2 -translate-x-1/2 z-[9999] animate-bounce-once">
-                    <div class="bg-gradient-to-br ${colors[type]} border rounded-2xl shadow-2xl px-8 py-5 min-w-[320px] max-w-[500px] flex flex-col items-center gap-3">
-                        <div class="flex items-center gap-3 w-full">
-                            <span class="text-2xl">${icons[type]}</span>
-                            <span class="font-black text-sm tracking-widest uppercase opacity-70">TITAN SEC</span>
-                        </div>
-                        <p class="text-center font-semibold text-sm leading-relaxed">${msg}</p>
-                        <button onclick="this.closest('.fixed').remove()" class="mt-1 px-6 py-1.5 bg-white/10 hover:bg-white/20 rounded-xl text-xs font-bold transition-all">OK</button>
-                    </div>
-                </div>`;
-            document.body.appendChild(div.firstElementChild);
-            setTimeout(() => div.firstElementChild?.remove(), 5000);
-        }
-
-        function titanConfirm(msg) {
-            return new Promise(resolve => {
-                const div = document.createElement('div');
-                div.innerHTML = `
-                    <div class="fixed inset-0 bg-black/70 z-[9999] flex items-center justify-center">
-                        <div class="bg-gradient-to-br from-slate-900 border border-red-500/50 rounded-2xl shadow-2xl px-8 py-6 min-w-[320px] max-w-[480px] flex flex-col items-center gap-4">
-                            <div class="flex items-center gap-3">
-                                <span class="text-2xl">🛡️</span>
-                                <span class="font-black text-sm tracking-widest uppercase text-red-400">TITAN SEC</span>
-                            </div>
-                            <p class="text-center text-gray-200 font-semibold text-sm leading-relaxed">${msg}</p>
-                            <div class="flex gap-3 mt-1">
-                                <button id="tc-yes" class="px-6 py-2 bg-red-600 hover:bg-red-500 rounded-xl text-white font-bold text-sm transition-all">تأكيد</button>
-                                <button id="tc-no" class="px-6 py-2 bg-slate-700 hover:bg-slate-600 rounded-xl text-gray-300 font-bold text-sm transition-all">إلغاء</button>
-                            </div>
-                        </div>
-                    </div>`;
-                const el = div.firstElementChild;
-                document.body.appendChild(el);
-                el.querySelector('#tc-yes').onclick = () => { el.remove(); resolve(true); };
-                el.querySelector('#tc-no').onclick = () => { el.remove(); resolve(false); };
-            });
-        }
+        function titanAlert(msg) { alert('🛡️ TITAN SEC\n\n' + msg); }
+        function titanConfirm(msg) { return Promise.resolve(confirm('🛡️ TITAN SEC\n\n' + msg)); }
         // ===== END TITAN Notifications =====
 
         async function generateQR() {
@@ -6636,24 +6591,15 @@ def auth_register():
             
             return jsonify({"success": True, "message": "تم إنشاء الحساب! يرجى التحقق من بريدك الإلكتروني.",
                             "username": username, "backup_codes": codes})
-        except Exception as e:
-            import traceback
-            if "database is locked" in str(e):
-                retry_count += 1
-                print(f"[TITAN] Database locked on register attempt {retry_count}, retrying...")
-                print(traceback.format_exc())
-                time.sleep(1)
-                continue
-            print(f"[TITAN] Register SQLite error: {e}")
-            print(traceback.format_exc())
-            return jsonify({"error": "فشل الوصول لقاعدة البيانات"}), 500
         except psycopg2.errors.UniqueViolation:
-            return jsonify({"error": "اسم المستخدم مأخوذ، اختر اسماً آخر"}), 409
+            if conn: conn.rollback()
+            return jsonify({"error": "اسم المستخدم أو البريد الإلكتروني مسجل مسبقاً، اختر اسماً آخر"}), 409
         except Exception as e:
             import traceback
+            if conn: conn.rollback()
             print(f"[TITAN] Register error: {e}")
             print(traceback.format_exc())
-            return jsonify({"error": str(e)}), 500
+            return jsonify({"error": "فشل إنشاء الحساب، حاول مجدداً"}), 500
         finally:
             if conn:
                 conn.close()
