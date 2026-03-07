@@ -53,7 +53,7 @@ app.config['PERMANENT_SESSION_LIFETIME'] = datetime.timedelta(minutes=10)
 
 # --- إعدادات الإيميل الخاصة بك يا عبد الله ---
 SENDER_EMAIL = "titansuppotp@gmail.com"
-SENDGRID_API_KEY = "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"
+SENDGRID_API_KEY = "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"
 ADMIN_EMAIL = "titansuppotp@gmail.com"  # ايميل المدير الذي يستقبل التنبيهات
 
 
@@ -7331,3 +7331,4 @@ except Exception as _e:
 if __name__ == "__main__":
     port = int(__import__("os").environ.get("PORT", 5000))
     __import__("__main__").app.run(host="0.0.0.0", port=port, debug=False)
+
