@@ -270,6 +270,16 @@ def init_db():
         )
     ''')
 
+    # --- جدول Integrity Baseline ---
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS integrity_baseline (
+            id SERIAL PRIMARY KEY,
+            file_path TEXT NOT NULL,
+            hash TEXT NOT NULL,
+            set_at TEXT NOT NULL
+        )
+    ''')
+
     conn.commit()
     
     # --- Create root user if not exists ---
