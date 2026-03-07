@@ -10,3 +10,5 @@ exifread
 faker
 gunicorn
 psycopg2-binary
+opencv-python-headless
+numpy
