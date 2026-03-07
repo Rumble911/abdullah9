@@ -6,7 +6,9 @@ import hashlib
 import base64
 import io
 import json
-import sqlite3
+import psycopg2
+import psycopg2.extras
+import psycopg2.errors
 import pyotp  # type: ignore
 import qrcode  # type: ignore
 import datetime
@@ -45,7 +47,7 @@ app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['PERMANENT_SESSION_LIFETIME'] = datetime.timedelta(minutes=10)
 
 # --- قاعدة بيانات المستخدمين (SQLite) ---
-USERS_DB = 'titan_users.db'
+# PostgreSQL - connection via DATABASE_URL env var
 
 # --- إعدادات الإيميل الخاصة بك يا عبد الله ---
 SENDER_EMAIL = "olloberganalixonov@gmail.com"
@@ -153,20 +155,22 @@ def send_canary_alert(ip, user_agent):
 
 
 def get_db_conn():
-    conn = sqlite3.connect(USERS_DB, timeout=30.0)
-    conn.execute('PRAGMA journal_mode=WAL')
-    conn.execute('PRAGMA synchronous=NORMAL')
-    conn.execute('PRAGMA busy_timeout=30000') # 30 seconds
+    import os
+    db_url = os.environ.get('DATABASE_URL', '')
+    conn = psycopg2.connect(db_url)
+    conn.autocommit = False
     return conn
 
 def init_db():
 
-    conn = sqlite3.connect(USERS_DB, timeout=20.0)
-    conn.execute('PRAGMA journal_mode=WAL')
+    import os
+    db_url = os.environ.get('DATABASE_URL', '')
+    conn = psycopg2.connect(db_url)
+    conn.autocommit = False
     c = conn.cursor()
     c.execute('''
         CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             username TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
             email TEXT DEFAULT NULL,
@@ -200,13 +204,13 @@ def init_db():
     ]:
         try:
             c.execute(col_def)
-        except sqlite3.OperationalError:
+        except Exception:
             pass
 
     # --- جدول سجلات الأمان (Security Logs) ---
     c.execute('''
         CREATE TABLE IF NOT EXISTS security_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             time TEXT NOT NULL,
             action TEXT NOT NULL,
             details TEXT DEFAULT '',
@@ -218,49 +222,46 @@ def init_db():
     # --- جدول أكواد الطوارئ (Backup Codes) ---
     c.execute('''
         CREATE TABLE IF NOT EXISTS backup_codes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             user_id INTEGER NOT NULL,
             code_hash TEXT NOT NULL,
-            used INTEGER DEFAULT 0,
-            FOREIGN KEY(user_id) REFERENCES users(id)
+            used INTEGER DEFAULT 0
         )
     ''')
 
     # --- جدول الجلسات النشطة (Active Sessions) ---
-    c.execute("PRAGMA table_info(active_sessions)")
-    if any(row[1] == 'session_token' for row in c.fetchall()):
+    c.execute("SELECT column_name FROM information_schema.columns WHERE table_name='active_sessions' AND column_name='session_token'")
+    if c.fetchone():
          c.execute("DROP TABLE active_sessions")
-         
+    
     c.execute('''
         CREATE TABLE IF NOT EXISTS active_sessions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             user_id INTEGER NOT NULL,
             token TEXT UNIQUE NOT NULL,
             user_agent TEXT DEFAULT '',
             ip TEXT DEFAULT '',
             country TEXT DEFAULT '',
-            created_at TEXT NOT NULL,
-            FOREIGN KEY(user_id) REFERENCES users(id)
+            created_at TEXT NOT NULL
         )
     ''')
 
     # --- جدول القبو الزمني (Time-Locked Vault) ---
     c.execute('''
         CREATE TABLE IF NOT EXISTS vault_timelocked (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             user_id INTEGER NOT NULL,
             filename TEXT NOT NULL,
             enc_data BLOB NOT NULL,
             unlock_at TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            FOREIGN KEY(user_id) REFERENCES users(id)
+            created_at TEXT NOT NULL
         )
     ''')
 
     # --- جدول الكناري (Canary Log) ---
     c.execute('''
         CREATE TABLE IF NOT EXISTS canary_log (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             time TEXT NOT NULL,
             ip TEXT DEFAULT '',
             user_agent TEXT DEFAULT ''
@@ -274,7 +275,7 @@ def init_db():
     if not c.fetchone():
         root_pass_hash = hash_password('Facebook123@@')
         now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        c.execute("INSERT INTO users (username, password_hash, is_verified, created_at, is_admin) VALUES (?, ?, 1, ?, 1)",
+        c.execute("INSERT INTO users (username, password_hash, is_verified, created_at, is_admin) VALUES (%s, %s, 1, %s, 1)",
                   ('root', root_pass_hash, now))
         conn.commit()
         print("[TITAN] Root user created.")
@@ -305,12 +306,12 @@ def _ensure_integrity_baseline():
     try:
         conn = get_db_conn()
         c = conn.cursor()
-        c.execute("SELECT hash FROM integrity_baseline WHERE file_path = ?", (app_path,))
+        c.execute("SELECT hash FROM integrity_baseline WHERE file_path = %s", (app_path,))
         row = c.fetchone()
         if not row:
             with open(app_path, 'rb') as f:
                 file_hash = hashlib.sha256(f.read()).hexdigest()
-            c.execute("INSERT INTO integrity_baseline (file_path, hash, set_at) VALUES (?, ?, ?)",
+            c.execute("INSERT INTO integrity_baseline (file_path, hash, set_at) VALUES (%s, %s, %s)",
                       (app_path, file_hash, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
             conn.commit()
     except Exception as e:
@@ -356,7 +357,7 @@ def add_audit_log(action, details="", ip="", username=""):
     conn = None
     try:
         conn = get_db_conn()
-        conn.execute("INSERT INTO security_logs (time, action, details, ip, username) VALUES (?,?,?,?,?)",
+        conn.execute("INSERT INTO security_logs (time, action, details, ip, username) VALUES (%s,%s,%s,%s,%s)",
                      (now, action, details, ip, username))
         conn.commit()
     except Exception as e:
@@ -5387,7 +5388,7 @@ def vault_has_password():
     try:
         conn = get_db_conn()
         c = conn.cursor()
-        c.execute("SELECT vault_password_hash FROM users WHERE id = ?", (user_id,))
+        c.execute("SELECT vault_password_hash FROM users WHERE id = %s", (user_id,))
         row = c.fetchone()
         has_pw = bool(row and row[0])
         return jsonify({"hasVaultPassword": has_pw})
@@ -5408,16 +5409,18 @@ def vault_set_password():
     if len(password) < 4:
         return jsonify({"error": "كلمة سر القبو يجب أن تكون 4 أحرف على الأقل"}), 400
     pw_hash = hash_password(password)
-    conn = sqlite3.connect(USERS_DB, timeout=20.0)
-    conn.execute('PRAGMA journal_mode=WAL')
+    import os
+    db_url = os.environ.get('DATABASE_URL', '')
+    conn = psycopg2.connect(db_url)
+    conn.autocommit = False
     c = conn.cursor()
     # Check if already set
-    c.execute("SELECT vault_password_hash FROM users WHERE id = ?", (user_id,))
+    c.execute("SELECT vault_password_hash FROM users WHERE id = %s", (user_id,))
     row = c.fetchone()
     if row and row[0]:
         conn.close()
         return jsonify({"error": "كلمة سر القبو محددة مسبقاً. استخدمها للدخول."}), 409
-    c.execute("UPDATE users SET vault_password_hash = ? WHERE id = ?", (pw_hash, user_id))
+    c.execute("UPDATE users SET vault_password_hash = %s WHERE id = %s", (pw_hash, user_id))
     conn.commit()
     conn.close()
     add_audit_log("تعيين كلمة سر القبو 🔐", f"المستخدم #{user_id} عيّن كلمة سر قبو جديدة")
@@ -5432,10 +5435,12 @@ def load_vault():
     if not key: return jsonify({"error": "Missing key"}), 400
 
     # Verify the vault password against the stored hash
-    conn = sqlite3.connect(USERS_DB, timeout=20.0)
-    conn.execute('PRAGMA journal_mode=WAL')
+    import os
+    db_url = os.environ.get('DATABASE_URL', '')
+    conn = psycopg2.connect(db_url)
+    conn.autocommit = False
     c = conn.cursor()
-    c.execute("SELECT vault_password_hash FROM users WHERE id = ?", (user_id,))
+    c.execute("SELECT vault_password_hash FROM users WHERE id = %s", (user_id,))
     row = c.fetchone()
     conn.close()
     if not row or not row[0]:
@@ -5470,10 +5475,12 @@ def save_vault():
     if not key: return jsonify({"error": "Missing key"}), 400
 
     # Re-verify password before saving
-    conn = sqlite3.connect(USERS_DB, timeout=20.0)
-    conn.execute('PRAGMA journal_mode=WAL')
+    import os
+    db_url = os.environ.get('DATABASE_URL', '')
+    conn = psycopg2.connect(db_url)
+    conn.autocommit = False
     c = conn.cursor()
-    c.execute("SELECT vault_password_hash FROM users WHERE id = ?", (user_id,))
+    c.execute("SELECT vault_password_hash FROM users WHERE id = %s", (user_id,))
     row = c.fetchone()
     conn.close()
     if not row or not row[0] or not verify_password(key, row[0]):
@@ -5601,7 +5608,7 @@ def vault_forgot_password():
     try:
         conn = get_db_conn()
         c = conn.cursor()
-        c.execute("SELECT email FROM users WHERE id = ?", (user_id,))
+        c.execute("SELECT email FROM users WHERE id = %s", (user_id,))
         row = c.fetchone()
         
         if not row or not row[0]:
@@ -5610,7 +5617,7 @@ def vault_forgot_password():
         email = row[0]
         otp = ''.join([str(secrets.randbelow(10)) for _ in range(6)])
         
-        c.execute("UPDATE users SET vault_otp_code = ? WHERE id = ?", (otp, user_id))
+        c.execute("UPDATE users SET vault_otp_code = %s WHERE id = %s", (otp, user_id))
         conn.commit()
         
         send_otp_email(email, otp)
@@ -5642,14 +5649,14 @@ def vault_reset_password():
     try:
         conn = get_db_conn()
         c = conn.cursor()
-        c.execute("SELECT vault_otp_code FROM users WHERE id = ?", (user_id,))
+        c.execute("SELECT vault_otp_code FROM users WHERE id = %s", (user_id,))
         row = c.fetchone()
         
         if not row or row[0] != otp:
             return jsonify({"error": "كود التحقق غير صحيح"}), 401
             
         new_hash = hash_password(new_password)
-        c.execute("UPDATE users SET vault_password_hash = ?, vault_otp_code = NULL WHERE id = ?", (new_hash, user_id))
+        c.execute("UPDATE users SET vault_password_hash = %s, vault_otp_code = NULL WHERE id = %s", (new_hash, user_id))
         conn.commit()
         
         add_audit_log("إعادة تعيين القبو ✅", f"تم تعيين كلمة سر قبو جديدة للمستخدم #{user_id}")
@@ -5673,7 +5680,7 @@ def admin_reset_system():
     try:
         conn = get_db_conn()
         c = conn.cursor()
-        c.execute("SELECT is_admin FROM users WHERE id = ?", (user_id,))
+        c.execute("SELECT is_admin FROM users WHERE id = %s", (user_id,))
         row = c.fetchone()
         
         if not row or not row[0]:
@@ -5681,7 +5688,7 @@ def admin_reset_system():
             
         # حذف كل شيء باستثناء الأدمن
         # 1. حذف الجلسات
-        c.execute("DELETE FROM active_sessions WHERE user_id != ?", (user_id,))
+        c.execute("DELETE FROM active_sessions WHERE user_id != %s", (user_id,))
         # 2. حذف القبو الزمني
         c.execute("DELETE FROM vault_timelocked")
         # 3. حذف أكواد الطوارئ
@@ -5689,7 +5696,7 @@ def admin_reset_system():
         # 4. حذف سجلات الأمان
         c.execute("DELETE FROM security_logs")
         # 5. حذف جميع المستخدمين باستثناء الحالي (الأدمن)
-        c.execute("DELETE FROM users WHERE id != ?", (user_id,))
+        c.execute("DELETE FROM users WHERE id != %s", (user_id,))
         
         conn.commit()
         
@@ -6468,9 +6475,9 @@ def _generate_backup_codes(user_id):
     try:
         conn = get_db_conn()
         c = conn.cursor()
-        c.execute("DELETE FROM backup_codes WHERE user_id = ?", (user_id,))
+        c.execute("DELETE FROM backup_codes WHERE user_id = %s", (user_id,))
         for code in codes:
-            c.execute("INSERT INTO backup_codes (user_id, code_hash, used) VALUES (?, ?, 0)",
+            c.execute("INSERT INTO backup_codes (user_id, code_hash, used) VALUES (%s, %s, 0)",
                       (user_id, hashlib.sha256(code.encode()).hexdigest()))
         conn.commit()
     except Exception as e:
@@ -6523,19 +6530,19 @@ def auth_register():
             c = conn.cursor()
             
             # --- فحص منع تكرار الإيميل (Duplicate Email Check) ---
-            c.execute("SELECT id FROM users WHERE email = ?", (email,))
+            c.execute("SELECT id FROM users WHERE email = %s", (email,))
             if c.fetchone():
                 return jsonify({"error": "البريد الإلكتروني مسجل مسبقاً بحساب آخر"}), 409
                 
             # Perform insertion
-            c.execute("INSERT INTO users (username, password_hash, email, otp_code, is_verified, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            c.execute("INSERT INTO users (username, password_hash, email, otp_code, is_verified, created_at) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
                       (username, pw_hash, email, otp_code, 0, created_at))
-            user_id = c.lastrowid
+            user_id = c.fetchone()[0]
             
             # Generate backup codes
             codes = [''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(8)) for _ in range(8)]
             for code in codes:
-                c.execute("INSERT INTO backup_codes (user_id, code_hash, used) VALUES (?, ?, 0)",
+                c.execute("INSERT INTO backup_codes (user_id, code_hash, used) VALUES (%s, %s, 0)",
                           (user_id, hashlib.sha256(code.encode()).hexdigest()))
             
             conn.commit()
@@ -6546,7 +6553,7 @@ def auth_register():
             
             return jsonify({"success": True, "message": "تم إنشاء الحساب! يرجى التحقق من بريدك الإلكتروني.",
                             "username": username, "backup_codes": codes})
-        except sqlite3.OperationalError as e:
+        except Exception as e:
             import traceback
             if "database is locked" in str(e):
                 retry_count += 1
@@ -6557,7 +6564,7 @@ def auth_register():
             print(f"[TITAN] Register SQLite error: {e}")
             print(traceback.format_exc())
             return jsonify({"error": "فشل الوصول لقاعدة البيانات"}), 500
-        except sqlite3.IntegrityError:
+        except psycopg2.errors.UniqueViolation:
             return jsonify({"error": "اسم المستخدم مأخوذ، اختر اسماً آخر"}), 409
         except Exception as e:
             import traceback
@@ -6583,11 +6590,11 @@ def auth_verify():
     try:
         conn = get_db_conn()
         c = conn.cursor()
-        c.execute("SELECT otp_code FROM users WHERE username = ?", (username,))
+        c.execute("SELECT otp_code FROM users WHERE username = %s", (username,))
         row = c.fetchone()
         
         if row and row[0] == otp:
-            c.execute("UPDATE users SET is_verified = 1, otp_code = NULL WHERE username = ?", (username,))
+            c.execute("UPDATE users SET is_verified = 1, otp_code = NULL WHERE username = %s", (username,))
             conn.commit()
             add_audit_log("تفعيل الحساب ✅", f"تم تفعيل حساب المستخدم: {username}")
             return jsonify({"success": True, "message": "تم تفعيل الحساب بنجاح!"})
@@ -6615,7 +6622,7 @@ def auth_login():
     try:
         conn = get_db_conn()
         c = conn.cursor()
-        c.execute("SELECT id, password_hash, is_verified, email, failed_attempts, lockout_until, last_user_agent, last_country FROM users WHERE username = ?", (username,))
+        c.execute("SELECT id, password_hash, is_verified, email, failed_attempts, lockout_until, last_user_agent, last_country FROM users WHERE username = %s", (username,))
         row = c.fetchone()
 
         if not row:
@@ -6639,7 +6646,7 @@ def auth_login():
             if failed_attempts >= 3:
                 lockout = (datetime.datetime.now() + datetime.timedelta(minutes=30)).isoformat()
                 add_audit_log("قفل الحساب", f"تم قفل حساب: {username} بعد 3 محاولات فاشلة", ip=ip, username=username)
-            c.execute("UPDATE users SET failed_attempts=?, lockout_until=? WHERE id=?", (failed_attempts, lockout, user_id))
+            c.execute("UPDATE users SET failed_attempts=%s, lockout_until=%s WHERE id=%s", (failed_attempts, lockout, user_id))
             conn.commit()
             add_audit_log("محاولة دخول فاشلة", f"كلمة سر خاطئة لـ: {username} (محاولة {failed_attempts}/3)", ip=ip, username=username)
             remaining_attempts = max(0, 3 - failed_attempts)
@@ -6652,12 +6659,12 @@ def auth_login():
         # --- نجح الدخول: تصفير المحاولات الفاشلة ---
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         current_country = _get_country(ip)
-        c.execute("UPDATE users SET failed_attempts=0, lockout_until=NULL, last_user_agent=?, last_login_ip=?, last_login_at=?, last_country=? WHERE id=?",
+        c.execute("UPDATE users SET failed_attempts=0, lockout_until=NULL, last_user_agent=%s, last_login_ip=%s, last_login_at=%s, last_country=%s WHERE id=%s",
                   (ua, ip, now_str, current_country, user_id))
 
         # --- إنشاء رمز جلسة (Session Token) ---
         session_token = secrets.token_hex(32)
-        c.execute("INSERT INTO active_sessions (user_id, token, user_agent, ip, country, created_at) VALUES (?,?,?,?,?,?)",
+        c.execute("INSERT INTO active_sessions (user_id, token, user_agent, ip, country, created_at) VALUES (%s,%s,%s,%s,%s,%s)",
                   (user_id, session_token, ua, ip, current_country, now_str))
         conn.commit()
 
@@ -6677,7 +6684,7 @@ def auth_login():
         if last_country and current_country and current_country != last_country and email:
             send_geo_fence_alert(username, ip, last_country, current_country, email)
 
-        c.execute("SELECT is_admin FROM users WHERE id = ?", (user_id,))
+        c.execute("SELECT is_admin FROM users WHERE id = %s", (user_id,))
         is_admin_flag = bool(c.fetchone()[0])
 
         return jsonify({"success": True, "username": username,
@@ -6699,7 +6706,7 @@ def auth_logout():
         conn = None
         try:
             conn = get_db_conn()
-            conn.execute("DELETE FROM active_sessions WHERE token=?", (token,))
+            conn.execute("DELETE FROM active_sessions WHERE token=%s", (token,))
             conn.commit()
         except Exception as e:
             print(f"[TITAN] Logout error: {e}")
@@ -6715,7 +6722,7 @@ def auth_status():
     if 'user_id' in session:
         user_id = session['user_id']
         conn = get_db_conn()
-        res = conn.execute("SELECT is_admin FROM users WHERE id = ?", (user_id,)).fetchone()
+        res = conn.execute("SELECT is_admin FROM users WHERE id = %s", (user_id,)).fetchone()
         is_admin_flag = bool(res[0]) if res else False
         conn.close()
         return jsonify({"loggedIn": True, "username": session.get('username', ''), "isAdmin": is_admin_flag})
@@ -6744,7 +6751,7 @@ def forgot_password_send():
     try:
         conn = get_db_conn()
         c = conn.cursor()
-        c.execute("SELECT id, email, is_verified FROM users WHERE username = ?", (username,))
+        c.execute("SELECT id, email, is_verified FROM users WHERE username = %s", (username,))
         row = c.fetchone()
         if not row:
             # نعطي نفس الرد حتى لا نكشف وجود المستخدمين
@@ -6828,7 +6835,7 @@ def forgot_password_reset():
     try:
         conn = get_db_conn()
         new_hash = hash_password(new_password)
-        conn.execute("UPDATE users SET password_hash=?, failed_attempts=0, lockout_until=NULL WHERE username=?",
+        conn.execute("UPDATE users SET password_hash=%s, failed_attempts=0, lockout_until=NULL WHERE username=%s",
                      (new_hash, username))
         conn.commit()
         del _FORGOT_OTP_STORE[username]
@@ -6854,17 +6861,17 @@ def auth_backup_login():
     try:
         conn = get_db_conn()
         c = conn.cursor()
-        c.execute("SELECT id FROM users WHERE username=? AND is_verified=1", (username,))
+        c.execute("SELECT id FROM users WHERE username=%s AND is_verified=1", (username,))
         user_row = c.fetchone()
         if not user_row:
             return jsonify({"error": "المستخدم غير موجود أو غير مفعّل"}), 404
         user_id = user_row[0]
         code_hash = hashlib.sha256(code.encode()).hexdigest()
-        c.execute("SELECT id FROM backup_codes WHERE user_id=? AND code_hash=? AND used=0", (user_id, code_hash))
+        c.execute("SELECT id FROM backup_codes WHERE user_id=%s AND code_hash=%s AND used=0", (user_id, code_hash))
         code_row = c.fetchone()
         if not code_row:
             return jsonify({"error": "الكود غير صحيح أو مستخدم مسبقاً"}), 401
-        c.execute("UPDATE backup_codes SET used=1 WHERE id=?", (code_row[0],))
+        c.execute("UPDATE backup_codes SET used=1 WHERE id=%s", (code_row[0],))
         conn.commit()
         session['user_id'] = user_id
         session['username'] = username
@@ -6892,12 +6899,12 @@ def auth_regenerate_backup_codes():
         c = conn.cursor()
         
         # Delete old codes
-        c.execute("DELETE FROM backup_codes WHERE user_id=?", (user_id,))
+        c.execute("DELETE FROM backup_codes WHERE user_id=%s", (user_id,))
         
         # Generate new codes
         codes = [''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(8)) for _ in range(8)]
         for code in codes:
-            c.execute("INSERT INTO backup_codes (user_id, code_hash, used) VALUES (?, ?, 0)",
+            c.execute("INSERT INTO backup_codes (user_id, code_hash, used) VALUES (%s, %s, 0)",
                       (user_id, hashlib.sha256(code.encode()).hexdigest()))
         
         conn.commit()
@@ -6918,7 +6925,7 @@ def auth_sessions():
     try:
         conn = get_db_conn()
         c = conn.cursor()
-        c.execute("SELECT id, user_agent, ip, country, created_at FROM active_sessions WHERE user_id=? ORDER BY created_at DESC", (session['user_id'],))
+        c.execute("SELECT id, user_agent, ip, country, created_at FROM active_sessions WHERE user_id=%s ORDER BY created_at DESC", (session['user_id'],))
         rows = c.fetchall()
         sessions = [{"id": r[0], "user_agent": r[1][:80], "ip": r[2], "country": r[3], "created_at": r[4]} for r in rows]
         return jsonify({"sessions": sessions})
@@ -6940,10 +6947,10 @@ def auth_sessions_revoke():
     try:
         conn = get_db_conn()
         if revoke_all:
-            conn.execute("DELETE FROM active_sessions WHERE user_id=?", (session['user_id'],))
+            conn.execute("DELETE FROM active_sessions WHERE user_id=%s", (session['user_id'],))
             session.clear()
         elif session_id:
-            conn.execute("DELETE FROM active_sessions WHERE id=? AND user_id=?", (session_id, session['user_id']))
+            conn.execute("DELETE FROM active_sessions WHERE id=%s AND user_id=%s", (session_id, session['user_id']))
         conn.commit()
         add_audit_log("إلغاء جلسات", f"أُلغيت الجلسات لـ: {session.get('username','')}", username=session.get('username',''))
         return jsonify({"success": True})
@@ -6969,7 +6976,7 @@ def canary_trap():
     conn = None
     try:
         conn = get_db_conn()
-        conn.execute("INSERT INTO canary_log (time, ip, user_agent) VALUES (?,?,?)", (now, ip, ua[:255]))
+        conn.execute("INSERT INTO canary_log (time, ip, user_agent) VALUES (%s,%s,%s)", (now, ip, ua[:255]))
         conn.commit()
     except Exception as e:
         print(f"[TITAN] Canary DB error: {e}")
@@ -7009,7 +7016,7 @@ def security_integrity():
     try:
         conn = get_db_conn()
         c = conn.cursor()
-        c.execute("SELECT hash, set_at FROM integrity_baseline WHERE file_path=?", (app_path,))
+        c.execute("SELECT hash, set_at FROM integrity_baseline WHERE file_path=%s", (app_path,))
         row = c.fetchone()
         if not row:
             return jsonify({"status": "unknown", "message": "لا يوجد baseline محفوظ"})
@@ -7044,8 +7051,8 @@ def security_integrity_reset():
             new_hash = hashlib.sha256(f.read()).hexdigest()
         now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         conn = get_db_conn()
-        conn.execute("DELETE FROM integrity_baseline WHERE file_path=?", (app_path,))
-        conn.execute("INSERT INTO integrity_baseline (file_path, hash, set_at) VALUES (?,?,?)", (app_path, new_hash, now))
+        conn.execute("DELETE FROM integrity_baseline WHERE file_path=%s", (app_path,))
+        conn.execute("INSERT INTO integrity_baseline (file_path, hash, set_at) VALUES (%s,%s,%s)", (app_path, new_hash, now))
         conn.commit()
         add_audit_log("Integrity Baseline Reset", f"تم إعادة تعيين baseline بواسطة: {session.get('username','')}")
         return jsonify({"success": True, "message": "تم تحديث baseline بنجاح"})
@@ -7080,8 +7087,8 @@ def security_panic():
 
         # مسح القبو الزمني للمستخدم
         conn = get_db_conn()
-        conn.execute("DELETE FROM vault_timelocked WHERE user_id=?", (user_id,))
-        conn.execute("DELETE FROM active_sessions WHERE user_id=?", (user_id,))
+        conn.execute("DELETE FROM vault_timelocked WHERE user_id=%s", (user_id,))
+        conn.execute("DELETE FROM active_sessions WHERE user_id=%s", (user_id,))
         conn.commit()
 
         session.clear()
@@ -7106,7 +7113,7 @@ def security_logs_api():
     try:
         conn = get_db_conn()
         c = conn.cursor()
-        c.execute("SELECT time, action, details, ip, username FROM security_logs ORDER BY id DESC LIMIT ?", (limit,))
+        c.execute("SELECT time, action, details, ip, username FROM security_logs ORDER BY id DESC LIMIT %s", (limit,))
         rows = c.fetchall()
         logs = [{"time": r[0], "action": r[1], "details": r[2], "ip": r[3], "username": r[4]} for r in rows]
         return jsonify({"logs": logs})
@@ -7138,7 +7145,7 @@ def vault_timelocked_upload():
         now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         conn = get_db_conn()
         c = conn.cursor()
-        c.execute("INSERT INTO vault_timelocked (user_id, filename, enc_data, unlock_at, created_at) VALUES (?,?,?,?,?)",
+        c.execute("INSERT INTO vault_timelocked (user_id, filename, enc_data, unlock_at, created_at) VALUES (%s,%s,%s,%s,%s)",
                   (session['user_id'], secure_filename(file.filename or 'file.bin'), enc, unlock_at, now))
         conn.commit()
         add_audit_log("رفع ملف زمني", f"ملف: {file.filename} يُفتح في: {unlock_at}", username=session.get('username',''))
@@ -7158,7 +7165,7 @@ def vault_timelocked_list():
     try:
         conn = get_db_conn()
         c = conn.cursor()
-        c.execute("SELECT id, filename, unlock_at, created_at FROM vault_timelocked WHERE user_id=? ORDER BY unlock_at", (session['user_id'],))
+        c.execute("SELECT id, filename, unlock_at, created_at FROM vault_timelocked WHERE user_id=%s ORDER BY unlock_at", (session['user_id'],))
         rows = c.fetchall()
         now = datetime.datetime.now()
         files = []
@@ -7188,7 +7195,7 @@ def vault_timelocked_download():
     try:
         conn = get_db_conn()
         c = conn.cursor()
-        c.execute("SELECT filename, enc_data, unlock_at FROM vault_timelocked WHERE id=? AND user_id=?", (file_id, session['user_id']))
+        c.execute("SELECT filename, enc_data, unlock_at FROM vault_timelocked WHERE id=%s AND user_id=%s", (file_id, session['user_id']))
         row = c.fetchone()
         if not row:
             return jsonify({"error": "الملف غير موجود"}), 404
