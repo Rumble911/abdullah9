@@ -38,6 +38,8 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes  # 
 import urllib.parse
 import smtplib
 from email.mime.text import MIMEText
+import urllib.request
+import json as _json
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # حد أقصى للملفات 16 ميجابايت
@@ -50,43 +52,48 @@ app.config['PERMANENT_SESSION_LIFETIME'] = datetime.timedelta(minutes=10)
 # PostgreSQL - connection via DATABASE_URL env var
 
 # --- إعدادات الإيميل الخاصة بك يا عبد الله ---
-SENDER_EMAIL = "olloberganalixonov@gmail.com"
-SENDER_PASSWORD = "hzps cwez exbq gwdi"  # الرمز الذي استخرجته من الصورة
-ADMIN_EMAIL = "olloberganalixonov@gmail.com"  # ايميل المدير الذي يستقبل التنبيهات
+SENDER_EMAIL = "titansuppotp@gmail.com"
+SENDGRID_API_KEY = "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"
+ADMIN_EMAIL = "titansuppotp@gmail.com"  # ايميل المدير الذي يستقبل التنبيهات
 
+
+def _sendgrid_send(to_email, subject, body):
+    """إرسال إيميل عبر SendGrid API"""
+    data = _json.dumps({
+        "personalizations": [{"to": [{"email": to_email}]}],
+        "from": {"email": SENDER_EMAIL, "name": "TITAN SEC"},
+        "subject": subject,
+        "content": [{"type": "text/plain", "value": body}]
+    }).encode('utf-8')
+    req = urllib.request.Request(
+        "https://api.sendgrid.com/v3/mail/send",
+        data=data,
+        headers={
+            "Authorization": f"Bearer {SENDGRID_API_KEY}",
+            "Content-Type": "application/json"
+        },
+        method="POST"
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return resp.status == 202
+    except Exception as e:
+        print(f"[SendGrid] Error: {e}")
+        return False
 
 def send_otp_email(target_email, otp_code):
-    """وظيفة إرسال كود التحقق عبر سيرفر Google SMTP"""
-    msg = MIMEText(f"""
-    مرحباً بك في TITAN SEC.
-    كود التحقق الخاص بك هو: {otp_code}
-    يرجى إدخاله في الموقع لإتمام عملية التسجيل.
-    """, 'plain', 'utf-8')
-    msg['Subject'] = "كود التحقق الخاص بك - TITAN"
-    msg['From'] = SENDER_EMAIL
-    msg['To'] = target_email
-
-    try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login(SENDER_EMAIL, SENDER_PASSWORD)
-            server.send_message(msg)
-        return True
-    except Exception as e:
-        print(f"Error sending email: {e}")
-        return False
+    """وظيفة إرسال كود التحقق عبر SendGrid"""
+    body = f"""مرحباً بك في TITAN SEC.
+كود التحقق الخاص بك هو: {otp_code}
+يرجى إدخاله في الموقع لإتمام عملية التسجيل."""
+    return _sendgrid_send(target_email, "كود التحقق الخاص بك - TITAN", body)
 
 def _send_email_async(subject, body, to=None):
     """إرسال إيميل في الخلفية (بدون تأخير الاستجابة)"""
     target = to or ADMIN_EMAIL
     def _worker():
         try:
-            msg = MIMEText(body, 'plain', 'utf-8')
-            msg['Subject'] = subject
-            msg['From'] = SENDER_EMAIL
-            msg['To'] = target
-            with smtplib.SMTP_SSL("smtp.gmail.com", 465) as srv:
-                srv.login(SENDER_EMAIL, SENDER_PASSWORD)
-                srv.send_message(msg)
+            _sendgrid_send(target, subject, body)
         except Exception as e:
             print(f"[TITAN Email] {e}")
     threading.Thread(target=_worker, daemon=True).start()
