@@ -182,6 +182,7 @@ def init_db():
         )
     ''')
     # Support upgrading existing DBs — add new columns safely
+    conn.commit()  # commit CREATE TABLE before migrations
     for col_def in [
         "ALTER TABLE users ADD COLUMN vault_password_hash TEXT DEFAULT NULL",
         "ALTER TABLE users ADD COLUMN email TEXT DEFAULT NULL",
@@ -204,8 +205,9 @@ def init_db():
     ]:
         try:
             c.execute(col_def)
+            conn.commit()
         except Exception:
-            pass
+            conn.rollback()  # PostgreSQL requires rollback after any error
 
     # --- جدول سجلات الأمان (Security Logs) ---
     c.execute('''
