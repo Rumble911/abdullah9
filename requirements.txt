@@ -9,3 +9,4 @@ psutil
 exifread
 faker
 gunicorn
+psycopg2-binary
