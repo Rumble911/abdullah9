@@ -254,7 +254,7 @@ def init_db():
             id SERIAL PRIMARY KEY,
             user_id INTEGER NOT NULL,
             filename TEXT NOT NULL,
-            enc_data BLOB NOT NULL,
+            enc_data BYTEA NOT NULL,
             unlock_at TEXT NOT NULL,
             created_at TEXT NOT NULL
         )
