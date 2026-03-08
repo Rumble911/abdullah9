@@ -53,7 +53,7 @@ app.config['PERMANENT_SESSION_LIFETIME'] = datetime.timedelta(minutes=10)
 
 # --- إعدادات الإيميل الخاصة بك يا عبد الله ---
 SENDER_EMAIL = "titansuppotp@gmail.com"
-SENDGRID_API_KEY = "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"
+SENDGRID_API_KEY = "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"
 ADMIN_EMAIL = "titansuppotp@gmail.com"  # ايميل المدير الذي يستقبل التنبيهات
 
 
