@@ -52,12 +52,12 @@ app.config['PERMANENT_SESSION_LIFETIME'] = datetime.timedelta(minutes=10)
 # PostgreSQL - connection via DATABASE_URL env var
 
 # --- إعدادات الإيميل الخاصة بك يا عبد الله ---
-SENDER_EMAIL = "titansuppotp@gmail.com"
-SENDGRID_API_KEY = "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"
-ADMIN_EMAIL = "titansuppotp@gmail.com"  # ايميل المدير الذي يستقبل التنبيهات
+SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "titansuppotp@gmail.com")
+SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY", "")
+ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "abdallahalqam4040@gmail.com")
 
 
-def _sendgrid_send(to_email, subject, body):
+def _resend_send(to_email, subject, body):
     """إرسال إيميل عبر SendGrid API"""
     data = _json.dumps({
         "personalizations": [{"to": [{"email": to_email}]}],
@@ -86,14 +86,14 @@ def send_otp_email(target_email, otp_code):
     body = f"""مرحباً بك في TITAN SEC.
 كود التحقق الخاص بك هو: {otp_code}
 يرجى إدخاله في الموقع لإتمام عملية التسجيل."""
-    return _sendgrid_send(target_email, "كود التحقق الخاص بك - TITAN", body)
+    return _resend_send(target_email, "كود التحقق الخاص بك - TITAN", body)
 
 def _send_email_async(subject, body, to=None):
     """إرسال إيميل في الخلفية (بدون تأخير الاستجابة)"""
     target = to or ADMIN_EMAIL
     def _worker():
         try:
-            _sendgrid_send(target, subject, body)
+            _resend_send(target, subject, body)
         except Exception as e:
             print(f"[TITAN Email] {e}")
     threading.Thread(target=_worker, daemon=True).start()
