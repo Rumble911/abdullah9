@@ -54,33 +54,33 @@ app.config['PERMANENT_SESSION_LIFETIME'] = datetime.timedelta(hours=12)
 # PostgreSQL - connection via DATABASE_URL env var
 
 # --- إعدادات الإيميل الخاصة بك يا عبد الله ---
-SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "titansuppotp@gmail.com")
-SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY", "")
+SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "noreply@titan-cyber.me")
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "abdallahalqam4040@gmail.com")
 
 
 def _resend_send(to_email, subject, body):
-    """إرسال إيميل عبر SendGrid API"""
+    """إرسال إيميل عبر Resend API"""
     data = _json.dumps({
-        "personalizations": [{"to": [{"email": to_email}]}],
-        "from": {"email": SENDER_EMAIL, "name": "TITAN SEC"},
+        "from": f"TITAN SEC <noreply@titan-cyber.me>",
+        "to": [to_email],
         "subject": subject,
-        "content": [{"type": "text/plain", "value": body}]
+        "text": body
     }).encode('utf-8')
     req = urllib.request.Request(
-        "https://api.sendgrid.com/v3/mail/send",
+        "https://api.resend.com/emails",
         data=data,
         headers={
-            "Authorization": f"Bearer {SENDGRID_API_KEY}",
+            "Authorization": f"Bearer {RESEND_API_KEY}",
             "Content-Type": "application/json"
         },
         method="POST"
     )
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
-            return resp.status == 202
+            return resp.status == 200
     except Exception as e:
-        print(f"[SendGrid] Error: {e}")
+        print(f"[Resend] Error: {e}")
         return False
 
 def send_otp_email(target_email, otp_code):
